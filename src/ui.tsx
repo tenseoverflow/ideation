@@ -1,6 +1,6 @@
 import type React from "react";
 
-export type IconName = "spark" | "folder" | "bulb" | "arrow" | "plus" | "chevron" | "play" | "image" | "mic" | "check" | "back" | "eye" | "pen" | "repeat" | "hand" | "compass";
+export type IconName = "trash" | "spark" | "folder" | "bulb" | "arrow" | "plus" | "chevron" | "play" | "image" | "mic" | "check" | "back" | "eye" | "pen" | "repeat" | "hand" | "compass";
 
 export const photos = [
   { url: "https://images.unsplash.com/photo-1729179664878-49b8cc390d2b?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200", alt: "Abstract multicolored building facade", credit: "Steve A Johnson" },
@@ -10,6 +10,7 @@ export const photos = [
 
 export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   const paths: Record<IconName, React.ReactNode> = {
+    trash: <><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7" /></>,
     spark: <path d="m12 2 1.2 4.2L17 8l-3.8 1.8L12 14l-1.2-4.2L7 8l3.8-1.8L12 2ZM5 14l.7 2.3L8 17.5l-2.3 1.2L5 21l-.7-2.3L2 17.5l2.3-1.2L5 14Z" />,
     folder: <path d="M3 6.5h6l2-2h3l2 2h5v12H3v-12Z" />,
     bulb: <><path d="M9 18h6M10 21h4" /><path d="M8.2 14.7A7 7 0 1 1 15.8 14.7c-.8.5-.8 1.3-.8 2.3H9c0-1 0-1.8-.8-2.3Z" /></>,

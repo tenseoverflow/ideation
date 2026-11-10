@@ -5,9 +5,13 @@
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": [
-      "/api/*"
+      "/api/*",
+      "/agents/*"
     ]
   },
+  "durable_objects": { "bindings": [{ "name": "ThoughtVoice", "class_name": "ThoughtVoice" }] },
+  "migrations": [{ "tag": "v1-voice", "new_sqlite_classes": ["ThoughtVoice"] }],
+  "compatibility_flags": ["nodejs_compat"],
   "ai": {
     "binding": "AI",
     "remote": true
