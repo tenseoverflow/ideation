@@ -2,7 +2,7 @@ import { SessionContext, useField, api, type Project, type Session } from "./pro
 import type { Photo, MuseRequest, MuseResponse } from "./muse";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Icon, AppButton, type IconName } from "./ui";
-import { HomePage } from "./home";
+import { HomePage, crewCharacters, provocations, warmupLessons } from "./home";
 import { VoiceInput } from "./VoiceInput";
 
 
@@ -15,12 +15,8 @@ const roles = [
 
 type Technique = "Photo sparks" | "Role play" | "Worst idea";
 
-const crewOptions = [
-  { name: "Engineer", initials: "EN" }, { name: "Doctor", initials: "DR" }, { name: "Dancer", initials: "DA" }, { name: "Chemist", initials: "CM" },
-  { name: "Mechanic", initials: "ME" }, { name: "Child", initials: "CH" }, { name: "Gardener", initials: "GA" }, { name: "Musician", initials: "MU" },
-  { name: "Teacher", initials: "TE" }, { name: "Architect", initials: "AR" }, { name: "Farmer", initials: "FA" }, { name: "Comedian", initials: "CO" },
-];
-type Stage = "ideate" | "review" | "shortlist";
+type Stage = "overview" | "rules" | "ideate" | "review" | "shortlist";
+type SessionRecord = { id: string; startedAt: string; finishedAt: string; finished: boolean; techniques: Technique[]; intention: string; pledges: string[]; ideas: { label: string; text: string }[]; museCount: number; kept: Pick[]; keptLabels: Record<string, string> };
 type View = "home" | "projects";
 
 type SessionEntry = {
@@ -41,7 +37,8 @@ const samePick = (a: Pick, b: Pick) => a.entryId === b.entryId && a.source === b
 
 /* ---------- Shared header (same on every page) ---------- */
 
-function SiteHeader({ crumbs, onHome, onProjects, right }: { crumbs?: string[]; onHome: () => void; onProjects: () => void; right?: React.ReactNode }) {
+type Crumb = { label: string; onClick?: () => void };
+function SiteHeader({ crumbs, onHome, onProjects, right }: { crumbs?: Crumb[]; onHome: () => void; onProjects: () => void; right?: React.ReactNode }) {
   return (
     <header className="site-header">
       <div className="site-header-left">
@@ -49,7 +46,7 @@ function SiteHeader({ crumbs, onHome, onProjects, right }: { crumbs?: string[]; 
         {crumbs?.length ? (
           <nav className="crumbs" aria-label="Breadcrumb">
             <AppButton onClick={onProjects}>My projects</AppButton>
-            {crumbs.map((crumb) => <span key={crumb}><Icon name="chevron" size={12} />{crumb}</span>)}
+            {crumbs.map((crumb) => <span key={crumb.label}><Icon name="chevron" size={12} />{crumb.onClick ? <AppButton onClick={crumb.onClick}>{crumb.label}</AppButton> : crumb.label}</span>)}
           </nav>
         ) : (
           <nav className="site-links">
@@ -134,20 +131,40 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
   const [entries, setEntries] = useField<SessionEntry[]>("entries", []);
   const [draft, setDraft] = useField("draft", "");
   const [currentThoughts, setCurrentThoughts] = useField<string[]>("currentThoughts", []);
-  const [crew, setCrew] = useField<string[]>("crew", ["Engineer", "Doctor", "Dancer"]);
-  const [crewIndex, setCrewIndex] = useField("crewIndex", 0);
+  const [crew, setCrew] = useField<string[]>("crewNames", ["Ada", "Sam", "Lou"]);
+  const [crewNow, setCrewNow] = useField<{ who: string; idea: string }[]>("crewNow", []);
+  const [readings, setReadings] = useField<Record<string, MuseReading>>("museReadings", {});
+  const [crewLoading, setCrewLoading] = useState(false);
+  const [crewError, setCrewError] = useState("");
 
   const [voiceActive, setVoiceActive] = useState(false);
 
   const isPhoto = selectedTechnique === "Photo sparks";
   const isWorst = selectedTechnique === "Worst idea";
-  const member = crewOptions.find((c) => c.name === crew[crewIndex % crew.length]) ?? crewOptions[0];
-  const promptNoun = isPhoto ? "photo" : isWorst ? "person" : "role";
+  const crewMembers = crewCharacters.filter((c) => crew.includes(c.name));
+  const question = provocations[(round - 1) % provocations.length];
+  const [intention] = useField("intention", "");
+  const promptNoun = isPhoto ? "photo" : isWorst ? "round" : "role";
   function toggleCrew(name: string) {
     if (voiceActive) return;
     if (crew.includes(name)) { if (crew.length > 1) setCrew(crew.filter((c) => c !== name)); }
     else setCrew([...crew, name]);
-    setCrewIndex(0);
+  }
+
+  async function passToCrew() {
+    setCrewLoading(true); setCrewError("");
+    try {
+      const results = await Promise.all(crewMembers.map(async (c) => {
+        const body: MuseRequest = { projectId: project.id, technique: "Worst idea", role: `${c.name}, ${withArticle(c.role.toLowerCase())}`, stimulus: `Answer this as ${c.name}, ${withArticle(c.role.toLowerCase())}: ${question}` };
+        const data = await api<MuseResponse>("/api/muse", "POST", body);
+        return { who: c.name, idea: data.ideas[0] };
+      }));
+      setCrewNow(results);
+    } catch {
+      setCrewError("The crew couldn’t answer. Try again, or go to the next round.");
+    } finally {
+      setCrewLoading(false);
+    }
   }
   useEffect(() => { const next = photos[photoIndex + 1]; if (next) { const image = new Image(); image.src = next.url; } }, [photos, photoIndex]);
   const allThoughts = [...entries.flatMap((e) => e.userThoughts), ...currentThoughts];
@@ -159,30 +176,36 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
     setDraft("");
   }
 
-  function captureEntry() {
-    const thoughts = draft.trim() ? [...currentThoughts, draft.trim()] : currentThoughts;
+  function captureEntry(extra: string[] = []) {
+    const thoughts = [...currentThoughts, ...extra, ...(draft.trim() ? [draft.trim()] : [])];
     const entry: SessionEntry = {
       id: entries.length + 1,
-      label: isPhoto ? `Photo ${round}` : isWorst ? member.name : roles[roleIndex].name,
+      label: isPhoto ? `Photo ${round}` : isWorst ? `Round ${round}` : roles[roleIndex].name,
       technique: selectedTechnique,
       photo: isPhoto ? photos[photoIndex] : undefined,
       imageUrl: isPhoto ? photos[photoIndex].url : undefined,
-      stimulus: isPhoto ? photos[photoIndex].alt : isWorst ? `The worst possible idea, as ${withArticle(member.name)}` : `Think like ${withArticle(roles[roleIndex].name)}: ${roles[roleIndex].cue}`,
+      stimulus: isPhoto ? photos[photoIndex].alt : isWorst ? question : `Think like ${withArticle(roles[roleIndex].name)}: ${roles[roleIndex].cue}`,
       userThoughts: thoughts,
     };
     setEntries([...entries, entry]);
+    if (isWorst && crewNow.length) { setReadings({ ...readings, [entry.id]: { status: "done", ideas: crewNow.map((c) => `${c.who}: ${c.idea}`) } }); setCrewNow([]); }
     setCurrentThoughts([]);
     setDraft("");
+  }
+
+  /** Moves to the next prompt. Returns false when the session is finished. */
+  function advance() {
+    if (round >= limit) { onFinish(); return false; }
+    if (isPhoto) setPhotoIndex(photoIndex + 1);
+    else if (!isWorst) setRoleIndex((roleIndex + 1) % roles.length);
+    setRound(round + 1);
+    return true;
   }
 
   function nextStimulus() {
     if (voiceActive || draft.length > 240) return;
     captureEntry();
-    if (round >= limit) return onFinish();
-    if (isPhoto) setPhotoIndex(photoIndex + 1);
-    else if (isWorst) setCrewIndex((crewIndex + 1) % crew.length);
-    else setRoleIndex((roleIndex + 1) % roles.length);
-    setRound(round + 1);
+    advance();
   }
 
   function finishNow() {
@@ -197,7 +220,8 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
     { name: "Worst idea", detail: "Bad ideas only, on purpose", tone: "rose", icon: "bulb" as IconName },
   ];
   const progressStep = Math.max(1, Math.ceil((round / limit) * 10));
-  const nextLabel = round >= limit ? "Finish & see Muse" : isPhoto ? "Next photo" : isWorst ? "Next person" : "Next role";
+  const finishLabel = isWorst ? "Finish & review" : "Finish & see Muse";
+  const nextLabel = round >= limit ? finishLabel : isPhoto ? "Next photo" : isWorst ? "Next round" : "Next role";
 
   if (!photos[photoIndex] && isPhoto) return <div className="canvas-scroll"><p role="status">{photoError || "Loading photos…"}</p>{photoError && <AppButton onClick={() => void loadPhotos()}>Retry</AppButton>}</div>;
 
@@ -207,6 +231,10 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
         <div>
           <span className="eyebrow">STEP 1 OF 3 · YOUR IDEAS</span>
           <h1>{project.challenge}</h1>
+          <div className="session-rules" aria-label="Reminders for this session">
+            {warmupLessons.map((l) => <span key={l.rule}>{l.rule}</span>)}
+            {intention && <em>Your intention: “{intention}”</em>}
+          </div>
         </div>
         <div className="progress-wrap">
           <div><span>Idea sparks</span><strong>{round} of {limit}</strong></div>
@@ -238,11 +266,11 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
         </div>
         {isWorst && (
           <div className="crew-picker">
-            <div><strong>Who joins your brainstorm?</strong><span>Pick the people whose worst ideas you want. You take turns being each of them.</span></div>
+            <div><strong>Who joins your crew?</strong><span>You stay yourself. Pick the characters who add their own worst ideas after each round.</span></div>
             <div className="crew-options">
-              {crewOptions.map((c) => (
+              {crewCharacters.map((c) => (
                 <AppButton aria-pressed={crew.includes(c.name)} className={crew.includes(c.name) ? "on" : ""} key={c.name} onClick={() => toggleCrew(c.name)}>
-                  <span>{c.initials}</span>{c.name}{crew.includes(c.name) && <Icon name="check" size={12} />}
+                  <span>{c.initials}</span>{c.name} · {c.role}{crew.includes(c.name) && <Icon name="check" size={12} />}
                 </AppButton>
               ))}
             </div>
@@ -261,7 +289,7 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
       <section className="exercise">
         <div className="section-title">
           <div><span className="section-number">02</span><h2>{isPhoto ? "Look. React. Connect." : isWorst ? "Bad ideas only" : "Step into a new role"}</h2></div>
-          <AppButton className="finish-early" disabled={voiceActive || draft.length > 240} onClick={finishNow}>Finish & see Muse</AppButton>
+          <AppButton className="finish-early" disabled={voiceActive || draft.length > 240} onClick={finishNow}>{finishLabel}</AppButton>
         </div>
 
         <div className="exercise-grid">
@@ -273,11 +301,17 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
             </div>
           ) : isWorst ? (
             <div className="role-card worst-card">
-              <div className="role-topline"><span><Icon name="bulb" size={14} /> WORST IDEA {String(round).padStart(2, "0")} / {limit}</span></div>
-              <span className="role-avatar">{member.initials}</span>
-              <span className="role-label">YOU ARE THE</span>
-              <h3>{member.name}</h3>
-              <p>What is the worst idea {withArticle(member.name.toLowerCase())} could have for this challenge?</p>
+              <div className="role-topline"><span><Icon name="bulb" size={14} /> WORST IDEA · ROUND {String(round).padStart(2, "0")} / {limit}</span></div>
+              <div className="crew-table">
+                <span className="crew-you">YOU</span>
+                {crewMembers.map((c, k) => (
+                  <span className={`crew-seat ${crewNow.some((x) => x.who === c.name) ? "spoke" : ""}`} key={c.name} style={{ "--angle": `${(360 / crewMembers.length) * k - 90}deg` } as React.CSSProperties}>
+                    <b>{c.initials}</b><em>{c.name}</em>
+                  </span>
+                ))}
+              </div>
+              <span className="role-label">BAD IDEAS ONLY</span>
+              <p className="worst-question">{question}</p>
               <div className="role-words"><span>no filter</span><span>the worse, the better</span><span>no wrong answers</span></div>
             </div>
           ) : (
@@ -294,9 +328,9 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
           <div className="prompt-panel">
             <div className="thought-step your-thought-step">
               <div className="thought-exchange-heading">
-                <span className="prompt-kicker">YOUR THOUGHTS</span>
-                <h3>{isPhoto ? "What could this photo mean for your project?" : isWorst ? `As ${withArticle(member.name.toLowerCase())}, what’s the worst idea you can think of?` : `How would ${withArticle(roles[roleIndex].name.toLowerCase())} solve this?`}</h3>
-                <p>{isWorst ? "Go for terrible, silly or impossible. This is about getting ideas out, not getting them right. Aim for at least 3 before you pass to the next person." : "Write one thought and press Enter. Then keep going: aim for at least 3 different ideas before you move on. There is no limit."}</p>
+                <span className="prompt-kicker">{isWorst ? "YOUR WORST IDEAS" : "YOUR THOUGHTS"}</span>
+                <h3>{isPhoto ? "What could this photo mean for your project?" : isWorst ? question : `How would ${withArticle(roles[roleIndex].name.toLowerCase())} solve this?`}</h3>
+                <p>{isWorst ? "Go for terrible, silly or impossible. This is about getting ideas out, not getting them right. Write at least 3, then pass to your crew to hear theirs." : "Write one thought and press Enter. Then keep going: aim for at least 3 different ideas before you move on. There is no limit."}</p>
               </div>
               <div className="current-thoughts">
                 {currentThoughts.length === 0 && <span className="placeholder-chip">Your {isWorst ? "worst ideas" : "thoughts"} for this {promptNoun} appear here</span>}
@@ -313,15 +347,28 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
                   value={draft}
                 />
                 <div>
-                  <VoiceInput projectId={project.id} onActiveChange={setVoiceActive} onThoughts={(thoughts, advance) => { if (advance) { setEntries([...entries, {id: entries.length + 1, label: isPhoto ? `Photo ${round}` : isWorst ? member.name : roles[roleIndex].name, technique: selectedTechnique, photo: isPhoto ? photos[photoIndex] : undefined, imageUrl: isPhoto ? photos[photoIndex].url : undefined, stimulus: isPhoto ? photos[photoIndex].alt : isWorst ? `The worst possible idea, as ${withArticle(member.name)}` : roles[roleIndex].cue, userThoughts: [...currentThoughts, ...thoughts, ...(draft.trim() ? [draft.trim()] : [])]}]); setCurrentThoughts([]); setDraft(""); } else setCurrentThoughts([...currentThoughts, ...thoughts]); }} onAdvance={() => { if (round >= limit) { onFinish(); return false; } if (isPhoto) setPhotoIndex(photoIndex + 1); else if (isWorst) setCrewIndex((crewIndex + 1) % crew.length); else setRoleIndex((roleIndex + 1) % roles.length); setRound(round + 1); return true; }} />
+                  <VoiceInput projectId={project.id} onActiveChange={setVoiceActive} onThoughts={(thoughts, next) => { if (next) captureEntry(thoughts); else setCurrentThoughts([...currentThoughts, ...thoughts]); }} onAdvance={advance} />
                   <span hidden={voiceActive}>{draft.length} / 240</span>
                   <AppButton hidden={voiceActive} className="add-button" disabled={voiceActive || !draft.trim() || draft.length > 240} onClick={addThought}><Icon name="plus" size={14} /> Add</AppButton>
                 </div>
               </div>
               {draft.length > 240 && <p role="alert">Shorten this thought to 240 characters before adding or continuing.</p>}
+              {isWorst && (crewNow.length > 0 || crewLoading || crewError) && (
+                <div className="crew-ideas">
+                  <small>FROM YOUR CREW</small>
+                  {crewLoading && <em className="loading-chip">Your crew is thinking of something terrible…</em>}
+                  {crewError && <em className="crew-error">{crewError}</em>}
+                  {crewNow.map((c) => <span key={c.who}><b>{crewCharacters.find((x) => x.name === c.who)?.initials}</b>{c.idea}</span>)}
+                  {crewNow.length > 0 && <p>Steal one, twist it or make it worse in the next round.</p>}
+                </div>
+              )}
               <div className="exchange-footer">
-                <span className={`thought-count ${currentThoughts.length >= 3 ? "met" : ""}`}>{currentThoughts.length >= 3 && <Icon name="check" size={12} />}{currentThoughts.length} {currentThoughts.length === 1 ? "thought" : "thoughts"} from this {promptNoun}{currentThoughts.length < 3 ? " · aim for 3 or more" : ""}</span>
-                <AppButton className="next-spark-button" disabled={voiceActive || draft.length > 240} onClick={nextStimulus}>{nextLabel} <Icon name="arrow" size={16} /></AppButton>
+                <span className={`thought-count ${currentThoughts.length >= 3 ? "met" : ""}`}>{currentThoughts.length >= 3 && <Icon name="check" size={12} />}{currentThoughts.length} {currentThoughts.length === 1 ? "thought" : "thoughts"} for this {promptNoun}{currentThoughts.length < 3 ? " · aim for 3 or more" : ""}</span>
+                {isWorst && !crewNow.length ? (
+                  <AppButton className="next-spark-button crew-button" disabled={voiceActive || !currentThoughts.length || crewLoading} onClick={() => void passToCrew()}>Pass to the crew <Icon name="arrow" size={16} /></AppButton>
+                ) : (
+                  <AppButton className="next-spark-button" disabled={voiceActive || draft.length > 240} onClick={nextStimulus}>{nextLabel} <Icon name="arrow" size={16} /></AppButton>
+                )}
               </div>
             </div>
           </div>
@@ -386,6 +433,7 @@ function useMuseReadings(project: Project, entries: SessionEntry[]) {
 }
 
 function SourceThumb({ entry }: { entry: SessionEntry }) {
+  if (entry.technique === "Worst idea") return <span className="role-review-avatar worst">R{entry.id}</span>;
   return entry.imageUrl ? <img src={entry.imageUrl} alt={entry.stimulus} /> : <span className="role-review-avatar">{entry.label.slice(0, 2).toUpperCase()}</span>;
 }
 
@@ -431,13 +479,14 @@ function ReviewCanvas({ project, entries, onBack, onContinue }: { project: Proje
                   </div>
                 </div>
                 <div className="thought-column ai-column">
-                  <span><Icon name="spark" size={10} /> MUSE’S THOUGHTS</span>
+                  <span>{entry.technique === "Worst idea" ? "YOUR CREW’S WORST IDEAS" : <><Icon name="spark" size={10} /> MUSE’S THOUGHTS</>}</span>
                   <div>
                     {(!reading || reading.status === "loading") && <em className="loading-chip">Muse is looking at this {entry.imageUrl ? "photo" : "role"}…</em>}
                     {reading?.status === "error" && <AppButton className="pick-chip retry" onClick={() => void retry(entry)}>Muse couldn’t answer. Retry</AppButton>}
                     {reading?.status === "done" && reading.ideas.map((text) => {
                       const pick: Pick = { entryId: entry.id, source: "muse", text };
-                      return <AppButton aria-pressed={isPicked(pick)} className={`pick-chip muse ${isPicked(pick) ? "picked" : ""}`} key={text} onClick={() => toggle(pick)}>{isPicked(pick) ? <Icon name="check" size={11} /> : <Icon name="spark" size={10} />}{text}</AppButton>;
+                      const who = entry.technique === "Worst idea" ? crewCharacters.find((c) => text.startsWith(`${c.name}: `)) : undefined;
+                      return <AppButton aria-pressed={isPicked(pick)} className={`pick-chip muse ${who ? "crew" : ""} ${isPicked(pick) ? "picked" : ""}`} key={text} onClick={() => toggle(pick)}>{isPicked(pick) ? <Icon name="check" size={11} /> : who ? <b className="chip-avatar">{who.initials}</b> : <Icon name="spark" size={10} />}{who ? text.slice(who.name.length + 2) : text}</AppButton>;
                     })}
                   </div>
                 </div>
@@ -458,7 +507,7 @@ function ReviewCanvas({ project, entries, onBack, onContinue }: { project: Proje
 
 /* ---------- Step 3: shortlist (new session, pairing comes later) ---------- */
 
-function ShortlistCanvas({ entries, onBack, onRestart }: { entries: SessionEntry[]; onBack: () => void; onRestart: () => void }) {
+function ShortlistCanvas({ entries, onBack, onFinish }: { entries: SessionEntry[]; onBack: () => void; onFinish: () => void }) {
   const [picks] = useField<Pick[]>("picks", []);
   const entryFor = (id: number) => entries.find((e) => e.id === id);
   const groups: { source: Pick["source"]; title: string }[] = [{ source: "you", title: "Your ideas" }, { source: "muse", title: "From Muse" }];
@@ -503,35 +552,204 @@ function ShortlistCanvas({ entries, onBack, onRestart }: { entries: SessionEntry
 
       <div className="selection-bar plain">
         <AppButton className="text-button" onClick={onBack}><Icon name="back" size={14} /> Back to review</AppButton>
-        <AppButton className="text-button danger" onClick={onRestart}>Start a new session</AppButton>
+        <AppButton className="primary-button" onClick={onFinish}><Icon name="check" size={16} /> Finish and save to project log</AppButton>
       </div>
     </div>
   );
 }
 
-function ProjectSession({ project }: { project: Project }) {
-  const { set } = useContext(SessionContext);
-  const [stage, setStage] = useField<Stage>("stage", "ideate");
-  const [entries] = useField<SessionEntry[]>("entries", []);
+const freshSession = { draft: "", currentThoughts: [], entries: [], picks: [], museReadings: {}, photoIndex: 0, roleIndex: 0, crewNow: [], round: 1, intention: "", startedAt: "" };
 
-  function restartSession() {
-    if (!confirm("Clear this project’s session and start over?")) return;
-    for (const [key, value] of Object.entries({ draft: "", currentThoughts: [], entries: [], picks: [], museReadings: {}, photoQueue: [], photoIndex: 0, roleIndex: 0, crewIndex: 0, round: 1 })) set(key, value);
-    setStage("ideate");
+function formatDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) + " · " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+/* ---------- Warm-up: one small lesson at a time ---------- */
+
+const WARMUP_KEY = "muse.skipWarmup";
+export function warmupSkipped() { try { return localStorage.getItem(WARMUP_KEY) === "1"; } catch { return false; } }
+function setWarmupSkipped(skip: boolean) { try { if (skip) localStorage.setItem(WARMUP_KEY, "1"); else localStorage.removeItem(WARMUP_KEY); } catch { /* storage unavailable */ } }
+
+function WarmupCanvas({ onStart }: { onStart: () => void }) {
+  const [step, setStep] = useState(0);
+  const [intention, setIntention] = useField("intention", "");
+  const [skip, setSkip] = useState(false);
+  const last = step === warmupLessons.length;
+  const next = () => { if (last) { setWarmupSkipped(skip); onStart(); } else setStep(step + 1); };
+  const back = () => setStep(Math.max(0, step - 1));
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); next(); }
+      if (e.key === "ArrowRight" && !last) next();
+      if (e.key === "ArrowLeft") back();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  const lesson = warmupLessons[step];
+  return (
+    <div className={`warmup ${last ? "final" : lesson.color}`}>
+      <div className="warmup-inner">
+        <div className="warmup-top">
+          <div className="warmup-dots" aria-hidden="true">{[...warmupLessons, null].map((_, k) => <span className={k < step ? "done" : k === step ? "on" : ""} key={k} />)}</div>
+          <span>{step + 1} / {warmupLessons.length + 1}</span>
+        </div>
+        {!last ? (
+          <div className="warmup-card" key={step}>
+            <span className="eyebrow">WARM-UP · REMINDER {step + 1}</span>
+            <h1>{lesson.rule}</h1>
+            <p>“{lesson.quote}”</p>
+          </div>
+        ) : (
+          <div className="warmup-card" key="final">
+            <span className="eyebrow">READY?</span>
+            <h1>Let’s make a mess.</h1>
+            <p className="warmup-why">We show this warm-up before every session because the right mindset matters more than the right idea. When bad ideas feel welcome, the good ones follow.</p>
+            <label htmlFor="intention">What do you want from this session? <small>Optional</small></label>
+            <input id="intention" maxLength={140} placeholder="For example: loosen up, or find ideas for the summer opening" value={intention} onChange={(e) => setIntention(e.target.value)} />
+            <label className="warmup-skip"><input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} /> Don’t show this warm-up again</label>
+          </div>
+        )}
+        <div className="warmup-nav">
+          {step > 0 ? <AppButton className="text-button" onClick={back}><Icon name="back" size={14} /> Back</AppButton> : <span />}
+          <span className="warmup-hint">Press <kbd>Enter</kbd> to continue</span>
+          <AppButton className="primary-button" onClick={next}>{last ? "Start ideating" : "Next"} <Icon name="arrow" size={16} /></AppButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Project overview with the session log ---------- */
+
+const techniqueTone: Record<Technique, string> = { "Photo sparks": "violet", "Role play": "yellow", "Worst idea": "rose" };
+
+function SessionLogCard({ record, index }: { record: SessionRecord; index: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <article className="log-card">
+      <div className="log-dot" aria-hidden="true" />
+      <header>
+        <div>
+          <span className="eyebrow">SESSION {index}{record.finished ? "" : " · NOT FINISHED"}</span>
+          <h3>{formatDate(record.startedAt)}</h3>
+        </div>
+        <div className="log-tags">{record.techniques.map((t) => <span className={`log-tag ${techniqueTone[t]}`} key={t}>{t}</span>)}</div>
+      </header>
+      {record.intention && <p className="log-intention">“{record.intention}”</p>}
+      <div className="log-stats"><span><strong>{record.ideas.length}</strong> your ideas</span><span><strong>{record.museCount}</strong> from Muse or crew</span><span><strong>{record.kept.length}</strong> kept</span></div>
+      {record.kept.length > 0 && (
+        <div className="log-kept">
+          <small>KEPT</small>
+          <div>{record.kept.map((k) => <span className={`pick-chip ${k.source} picked-soft`} key={`${k.entryId}-${k.source}-${k.text}`}>{k.text}</span>)}</div>
+        </div>
+      )}
+      {record.ideas.length > 0 && (
+        <>
+          <AppButton className="text-button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? "Hide" : "Show"} all {record.ideas.length} of your ideas <Icon name="chevron" size={12} /></AppButton>
+          {open && <ul className="log-ideas">{record.ideas.map((idea, k) => <li key={k}><small>{idea.label}</small>{idea.text}</li>)}</ul>}
+        </>
+      )}
+    </article>
+  );
+}
+
+function WarmupToggle() {
+  const [skipped, setSkipped] = useState(warmupSkipped());
+  if (!skipped) return null;
+  return <AppButton className="text-button warmup-toggle" onClick={() => { setWarmupSkipped(false); setSkipped(false); }}>Warm-up is off. Turn it back on</AppButton>;
+}
+
+function ProjectOverview({ project, inProgress, onContinue, onNew }: { project: Project; inProgress: boolean; onContinue: () => void; onNew: () => void }) {
+  const [history] = useField<SessionRecord[]>("history", []);
+  const totalIdeas = history.reduce((n, r) => n + r.ideas.length, 0);
+  const totalKept = history.reduce((n, r) => n + r.kept.length, 0);
+  return (
+    <div className="canvas-scroll overview">
+      <section className="overview-hero">
+        <div>
+          <span className="eyebrow">PROJECT · {project.name.toUpperCase()}</span>
+          <h1>{project.challenge}</h1>
+        </div>
+        <div className="overview-actions">
+          {inProgress && <AppButton className="primary-button" onClick={onContinue}>Continue current session <Icon name="arrow" size={16} /></AppButton>}
+          <AppButton className={inProgress ? "ghost-button" : "primary-button"} onClick={onNew}><Icon name="plus" size={16} /> Start a new session</AppButton>
+        </div>
+      </section>
+      <div className="overview-stats">
+        <div><strong>{history.length}</strong><span>sessions</span></div>
+        <div><strong>{totalIdeas}</strong><span>ideas from you</span></div>
+        <div><strong>{totalKept}</strong><span>ideas kept</span></div>
+        <WarmupToggle />
+      </div>
+      <section>
+        <div className="section-title"><div><h2>Session log</h2></div><span>Every session you finish is saved here, newest first</span></div>
+        {history.length === 0 ? (
+          <div className="empty-trail">No sessions yet. When you finish a session, its ideas, your promises and what you kept are saved here, so you can look back at how the project grew.</div>
+        ) : (
+          <div className="log-list">{[...history].reverse().map((r, k) => <SessionLogCard key={r.id} record={r} index={history.length - k} />)}</div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ProjectSession({ project }: { project: Project }) {
+  const { data, set } = useContext(SessionContext);
+  const [stage, setStage] = useField<Stage>("stage", "overview");
+  const [entries] = useField<SessionEntry[]>("entries", []);
+  const [history, setHistory] = useField<SessionRecord[]>("history", []);
+  const inProgress = entries.length > 0 || ((data.currentThoughts as string[] | undefined)?.length ?? 0) > 0;
+
+  function archive(finished: boolean) {
+    const picks = (data.picks as Pick[] | undefined) ?? [];
+    const readings = (data.museReadings as Record<string, MuseReading> | undefined) ?? {};
+    const record: SessionRecord = {
+      id: crypto.randomUUID(),
+      startedAt: (data.startedAt as string) || new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      finished,
+      techniques: [...new Set(entries.map((e) => e.technique ?? "Photo sparks"))],
+      intention: (data.intention as string) ?? "",
+      pledges: [],
+      ideas: entries.flatMap((e) => e.userThoughts.map((text) => ({ label: e.label, text }))),
+      museCount: Object.values(readings).reduce((n, r) => n + r.ideas.length, 0),
+      kept: picks,
+      keptLabels: {},
+    };
+    setHistory([...history, record]);
+  }
+
+  function reset(next: Stage) {
+    for (const [key, value] of Object.entries(freshSession)) set(key, value);
+    setStage(next);
+    window.scrollTo(0, 0);
+  }
+
+  function startNew() {
+    if (inProgress) {
+      if (!confirm("Your current session will be saved to the log as not finished. Start a new one?")) return;
+      archive(false);
+    }
+    if (warmupSkipped()) { reset("ideate"); set("startedAt", new Date().toISOString()); } else reset("rules");
   }
 
   return (
     <main className="workspace">
+      {stage === "overview" && <ProjectOverview project={project} inProgress={inProgress} onContinue={() => setStage("ideate")} onNew={startNew} />}
+      {stage === "rules" && <WarmupCanvas onStart={() => { set("startedAt", new Date().toISOString()); setStage("ideate"); window.scrollTo(0, 0); }} />}
       {stage === "ideate" && <MainCanvas project={project} onFinish={() => setStage("review")} />}
       {stage === "review" && <ReviewCanvas project={project} entries={entries} onBack={() => setStage("ideate")} onContinue={() => setStage("shortlist")} />}
-      {stage === "shortlist" && <ShortlistCanvas entries={entries} onBack={() => setStage("review")} onRestart={restartSession} />}
+      {stage === "shortlist" && <ShortlistCanvas entries={entries} onBack={() => setStage("review")} onFinish={() => { archive(true); reset("overview"); }} />}
     </main>
   );
 }
 
 /* ---------- App shell: data, saving, routing ---------- */
 
-const stageNames: Record<Stage, string> = { ideate: "Session", review: "Compare with Muse", shortlist: "Shortlist" };
+const stageNames: Record<Stage, string> = { overview: "Overview", rules: "Warm-up", ideate: "Session", review: "Review", shortlist: "Shortlist" };
 
 export default function App() {
   const [view, setView] = useState<View>("home");
@@ -552,7 +770,7 @@ export default function App() {
   useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (latest.current !== saved.current) e.preventDefault(); }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, []);
   async function leave(to: View) { if (project) { try { while (latest.current !== saved.current) await flush(); } catch { if (!confirm("Save failed. Leave without saving?")) return; } setProject(null); void list(); } setView(to); window.scrollTo(0, 0); }
 
-  const stage = (data.stage as Stage | undefined) ?? "ideate";
+  const stage = (data.stage as Stage | undefined) ?? "overview";
   const statusTone = status === "Saved" ? "ok" : status === "Conflict" || status === "Save failed" ? "bad" : "busy";
 
   const right = project ? (
@@ -571,7 +789,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <SiteHeader
-        crumbs={project ? [project.name, stageNames[stage]] : view === "projects" ? [] : undefined}
+        crumbs={project ? (stage === "overview" ? [{ label: project.name }] : [{ label: project.name, onClick: () => setData((d) => ({ ...d, stage: "overview" })) }, { label: stageNames[stage] }]) : view === "projects" ? [] : undefined}
         onHome={() => void leave("home")}
         onProjects={() => void leave("projects")}
         right={right}
@@ -594,7 +812,7 @@ export default function App() {
       )}
       {form && (
         <div className="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-form-title">
-          <form onSubmit={async (e) => { e.preventDefault(); try { const r = await api<{ id: string }>(form.id ? `/api/projects/${form.id}` : "/api/projects", form.id ? "PATCH" : "POST", form); setForm(null); await list(); if (!form.id) await open(r.id); } catch (e) { setError(String(e)); } }}>
+          <form onSubmit={async (e) => { e.preventDefault(); try { const r = await api<{ id: string }>(form.id ? `/api/projects/${form.id}` : "/api/projects", form.id ? "PATCH" : "POST", form); setForm(null); await list(); if (!form.id) { await open(r.id); setData((d) => ({ ...d, stage: warmupSkipped() ? "ideate" : "rules", startedAt: new Date().toISOString() })); } } catch (e) { setError(String(e)); } }}>
             <span className="eyebrow">{form.id ? "EDIT PROJECT" : "NEW PROJECT"}</span>
             <h2 id="project-form-title">{form.id ? "Edit project" : "What do you want to explore?"}</h2>
             <label htmlFor="project-name">Name</label>
