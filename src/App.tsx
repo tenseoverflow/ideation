@@ -1,37 +1,9 @@
-import {SessionContext,useField,api,type Project,type Session} from "./projects";
-import { CHALLENGE, type MuseRequest, type MuseResponse } from "./muse";
+import { SessionContext, useField, api, type Project, type Session } from "./projects";
+import type { MuseRequest, MuseResponse } from "./muse";
 import { useContext, useEffect, useRef, useState } from "react";
+import { Icon, AppButton, photos, type IconName } from "./ui";
+import { HomePage } from "./home";
 
-type IconName =
-  | "spark"
-  | "grid"
-  | "folder"
-  | "clock"
-  | "bulb"
-  | "shuffle"
-  | "arrow"
-  | "plus"
-  | "chevron"
-  | "play"
-  | "image";
-
-const photos = [
-  {
-    url: "https://images.unsplash.com/photo-1729179664878-49b8cc390d2b?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200",
-    alt: "Abstract multicolored building facade",
-    credit: "Steve A Johnson",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1764007022081-01b34518e2c2?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200",
-    alt: "Colorful beach huts receding into the distance",
-    credit: "the iop",
-  },
-  {
-    url: "https://images.unsplash.com/photo-1579963824410-69e7079bef9d?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200",
-    alt: "Colorful abstract painting",
-    credit: "Roger Bradshaw",
-  },
-];
 
 const roles = [
   { name: "Captain", initials: "CA", cue: "Steer the crew. Set a clear destination.", words: ["crew", "map", "signal"] },
@@ -41,175 +13,139 @@ const roles = [
 ];
 
 type Technique = "Photo sparks" | "Role play";
-type Stage = "ideate" | "review";
+type Stage = "ideate" | "review" | "shortlist";
+type View = "home" | "projects";
 
 type SessionEntry = {
   id: number;
   label: string;
+  technique: Technique;
   imageUrl?: string;
+  stimulus: string;
   userThoughts: string[];
-  aiThoughts: string[];
-  selectedAiThoughts: string[];
 };
+type Pick = { entryId: number; source: "you" | "muse"; text: string };
+type MuseReading = { status: "loading" | "done" | "error"; ideas: string[] };
 
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
-  const paths: Record<IconName, React.ReactNode> = {
-    spark: <path d="m12 2 1.2 4.2L17 8l-3.8 1.8L12 14l-1.2-4.2L7 8l3.8-1.8L12 2ZM5 14l.7 2.3L8 17.5l-2.3 1.2L5 21l-.7-2.3L2 17.5l2.3-1.2L5 14Z" />,
-    grid: <path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm10 0h6v6h-6v-6Z" />,
-    folder: <path d="M3 6.5h6l2-2h3l2 2h5v12H3v-12Z" />,
-    clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
-    bulb: <><path d="M9 18h6M10 21h4" /><path d="M8.2 14.7A7 7 0 1 1 15.8 14.7c-.8.5-.8 1.3-.8 2.3H9c0-1 0-1.8-.8-2.3Z" /></>,
-    shuffle: <><path d="M4 7h3c4 0 5 10 9 10h4" /><path d="m17 14 3 3-3 3M4 17h3c1.1 0 2-.7 2.8-1.7M14.2 8.7C15 7.7 15.8 7 17 7h3M17 4l3 3-3 3" /></>,
-    arrow: <path d="M5 12h14m-5-5 5 5-5 5" />,
-    plus: <path d="M12 5v14M5 12h14" />,
-    chevron: <path d="m9 18 6-6-6-6" />,
-    play: <path d="m9 7 8 5-8 5V7Z" />,
-    image: <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="2" /><path d="m4 18 5-5 3 3 3-4 5 6" /></>,
-  };
+const MUSE_PER_SPARK = 6;
+const samePick = (a: Pick, b: Pick) => a.entryId === b.entryId && a.source === b.source && a.text === b.text;
 
+/* ---------- Shared header (same on every page) ---------- */
+
+function SiteHeader({ crumbs, onHome, onProjects, right }: { crumbs?: string[]; onHome: () => void; onProjects: () => void; right?: React.ReactNode }) {
   return (
-    <svg
-      aria-hidden="true"
-      className="shrink-0"
-      fill={name === "spark" || name === "grid" || name === "play" ? "currentColor" : "none"}
-      height={size}
-      viewBox="0 0 24 24"
-      width={size}
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.7"
-    >
-      {paths[name]}
-    </svg>
+    <header className="site-header">
+      <div className="site-header-left">
+        <AppButton className="brand" onClick={onHome}><span className="brand-mark"><Icon name="spark" size={14} /></span>Muse</AppButton>
+        {crumbs?.length ? (
+          <nav className="crumbs" aria-label="Breadcrumb">
+            <AppButton onClick={onProjects}>My projects</AppButton>
+            {crumbs.map((crumb) => <span key={crumb}><Icon name="chevron" size={12} />{crumb}</span>)}
+          </nav>
+        ) : (
+          <nav className="site-links">
+            <a href="#why">Why Muse</a>
+            <a href="#techniques">Techniques</a>
+            <a href="#how">How it works</a>
+            <AppButton onClick={onProjects}>My projects</AppButton>
+          </nav>
+        )}
+      </div>
+      <div className="site-header-right">{right}</div>
+    </header>
   );
 }
 
-function AppButton({
-  children,
-  className = "",
-  type = "button",
-  ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/* ---------- Projects dashboard ---------- */
+
+const tones = ["violet", "yellow", "green", "rose"];
+
+function ProjectsPage({ projects, onOpen, onEdit, onCreate, onDelete }: { projects: Project[]; onOpen: (id: string) => void; onEdit: (p: Project) => void; onCreate: () => void; onDelete: (p: Project) => void }) {
   return (
-    <button className={`app-button ${className}`} type={type} {...props}>
-      {children}
-    </button>
+    <main className="dashboard">
+      <div className="dashboard-head">
+        <div>
+          <span className="eyebrow">MY PROJECTS</span>
+          <h1>A space for each question you want to explore.</h1>
+        </div>
+        <AppButton className="primary-button" onClick={onCreate}><Icon name="plus" size={16} /> New project</AppButton>
+      </div>
+      <div className="project-grid">
+        <AppButton className="project-tile new-tile" onClick={onCreate}>
+          <span className="technique-icon"><Icon name="plus" /></span>
+          <strong>New project</strong>
+          <small>Start with a challenge question</small>
+        </AppButton>
+        {projects.map((p, index) => (
+          <article className="project-tile" key={p.id}>
+            <button className={`project-cover ${tones[index % tones.length]}`} onClick={() => onOpen(p.id)} type="button" aria-label={`Open ${p.name}`}>
+              <Icon name="spark" size={22} />
+            </button>
+            <div className="project-body">
+              <strong>{p.name}</strong>
+              <p>{p.challenge}</p>
+              <small>Updated {p.updatedAt}</small>
+            </div>
+            <div className="project-actions">
+              <AppButton className="primary-button small" onClick={() => onOpen(p.id)}>Open</AppButton>
+              <AppButton className="text-button" onClick={() => onEdit(p)}>Edit</AppButton>
+              <AppButton className="text-button danger" onClick={() => onDelete(p)}>Delete</AppButton>
+            </div>
+          </article>
+        ))}
+      </div>
+    </main>
   );
 }
 
-function MainCanvas({ project,
-  photoIndex,
-  setPhotoIndex,
-  roleIndex,
-  setRoleIndex,
-  round,
-  setRound,
-  limit,
-  setLimit,
-  selectedTechnique,
-  setSelectedTechnique,
-  ideas,
-  setIdeas,
-  entries,
-  setEntries,
-  museRevealed,
-  setMuseRevealed,
-  onFinish,
-}: {
-  project: Project;
-  photoIndex: number;
-  setPhotoIndex: (index: number) => void;
-  roleIndex: number;
-  setRoleIndex: (index: number) => void;
-  round: number;
-  setRound: (round: number) => void;
-  limit: number;
-  setLimit: (limit: number) => void;
-  selectedTechnique: Technique;
-  setSelectedTechnique: (technique: Technique) => void;
-  ideas: string[];
-  setIdeas: (ideas: string[]) => void;
-  entries: SessionEntry[];
-  setEntries: (entries: SessionEntry[]) => void;
-  museRevealed: boolean;
-  setMuseRevealed: (revealed: boolean) => void;
-  onFinish: () => void;
-}) {
+/* ---------- Step 1: ideate (your own thoughts only) ---------- */
+
+function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => void }) {
+  const [photoIndex, setPhotoIndex] = useField("photoIndex", 0);
+  const [roleIndex, setRoleIndex] = useField("roleIndex", 0);
+  const [round, setRound] = useField("round", 1);
+  const [limit, setLimit] = useField("limit", 20);
+  const [selectedTechnique, setSelectedTechnique] = useField<Technique>("selectedTechnique", "Photo sparks");
+  const [entries, setEntries] = useField<SessionEntry[]>("entries", []);
   const [draft, setDraft] = useField("draft", "");
   const [currentThoughts, setCurrentThoughts] = useField<string[]>("currentThoughts", []);
-  const [selectedMuseThoughts, setSelectedMuseThoughts] = useField<string[]>("selectedMuseThoughts", []);
+  const [voiceNote, setVoiceNote] = useState(false);
 
-  const [museIdeas, setMuseIdeas] = useField<string[]>("museIdeas", []);
-  const [loading, setLoading] = useState(false);
-  const [museError, setMuseError] = useState("");
-  const pending = useRef<AbortController | null>(null);
-  function cancelMuse() { pending.current?.abort(); pending.current = null; setLoading(false); setMuseIdeas([]); setMuseError(""); }
-  useEffect(() => () => pending.current?.abort(), []);
-  async function revealMuse() {
-    if (pending.current) return;
-    const thoughts = draft.trim() ? [...currentThoughts, draft.trim()] : currentThoughts;
-    if (!thoughts.length) return;
-    if (draft.trim()) { setIdeas([...ideas, draft.trim()]); setCurrentThoughts(thoughts); }
-    setDraft(""); setMuseRevealed(true); setLoading(true); setMuseError("");
-    const controller = new AbortController(); pending.current = controller;
-    const timeout = setTimeout(() => controller.abort(), 45000);
-    try {
-      const body: MuseRequest = { projectId: project.id, technique: selectedTechnique, role: selectedTechnique === "Role play" ? roles[roleIndex].name : undefined, thoughts };
-      const response = await fetch("/api/muse", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body), signal:controller.signal});
-      if (!response.ok) throw Error();
-      const data: MuseResponse = await response.json();
-      if (!Array.isArray(data.ideas) || !data.ideas.length) throw Error();
-      if (pending.current === controller) setMuseIdeas(data.ideas);
-    } catch { if (pending.current === controller) setMuseError("Muse could not generate ideas. Please retry or continue without Muse."); }
-    finally { clearTimeout(timeout); if (pending.current === controller) { pending.current = null; setLoading(false); } }
-  }
+  const isPhoto = selectedTechnique === "Photo sparks";
+  const allThoughts = [...entries.flatMap((e) => e.userThoughts), ...currentThoughts];
 
-  function toggleMuseThought(thought: string) {
-    setSelectedMuseThoughts((selected) =>
-      selected.includes(thought)
-        ? selected.filter((item) => item !== thought)
-        : [...selected, thought],
-    );
+  function addThought() {
+    const text = draft.trim();
+    if (!text) return;
+    setCurrentThoughts([...currentThoughts, text]);
+    setDraft("");
   }
 
   function captureEntry() {
-    const pendingThoughts = draft.trim() ? [...currentThoughts, draft.trim()] : currentThoughts;
-    if (draft.trim()) setIdeas([...ideas, draft.trim()]);
+    const thoughts = draft.trim() ? [...currentThoughts, draft.trim()] : currentThoughts;
     const entry: SessionEntry = {
       id: entries.length + 1,
-      label: selectedTechnique === "Photo sparks" ? `Photo ${round}` : roles[roleIndex].name,
-      imageUrl: selectedTechnique === "Photo sparks" ? photos[photoIndex].url : undefined,
-      userThoughts: pendingThoughts,
-      aiThoughts: museIdeas,
-      selectedAiThoughts: selectedMuseThoughts,
+      label: isPhoto ? `Photo ${round}` : roles[roleIndex].name,
+      technique: selectedTechnique,
+      imageUrl: isPhoto ? photos[photoIndex].url : undefined,
+      stimulus: isPhoto ? photos[photoIndex].alt : `Think like a ${roles[roleIndex].name}: ${roles[roleIndex].cue}`,
+      userThoughts: thoughts,
     };
-    cancelMuse();
-    const updated = [...entries, entry];
-    setEntries(updated);
+    setEntries([...entries, entry]);
     setCurrentThoughts([]);
-    setSelectedMuseThoughts([]);
     setDraft("");
-    setMuseRevealed(false);
-    return updated;
   }
 
   function nextStimulus() {
     captureEntry();
-    if (round >= limit) {
-      onFinish();
-      return;
-    }
-    if (selectedTechnique === "Photo sparks") {
-      setPhotoIndex((photoIndex + 1) % photos.length);
-    } else {
-      setRoleIndex((roleIndex + 1) % roles.length);
-    }
+    if (round >= limit) return onFinish();
+    if (isPhoto) setPhotoIndex((photoIndex + 1) % photos.length);
+    else setRoleIndex((roleIndex + 1) % roles.length);
     setRound(round + 1);
   }
 
   function finishNow() {
-    captureEntry();
+    if (draft.trim() || currentThoughts.length) captureEntry();
     onFinish();
   }
 
@@ -217,345 +153,401 @@ function MainCanvas({ project,
     { name: "Photo sparks", detail: "React to random images", tone: "violet", icon: "image" as IconName },
     { name: "Role play", detail: "Solve it through new eyes", tone: "yellow", icon: "play" as IconName },
   ];
-
   const progressStep = Math.max(1, Math.ceil((round / limit) * 10));
+  const nextLabel = round >= limit ? "Finish & see Muse" : isPhoto ? "Next photo" : "Next role";
 
   return (
-    <main className="workspace">
-      <header className="topbar">
-        <div className="breadcrumb"><span>Project workspace</span><Icon name="chevron" size={14} /><strong>{project.name}</strong></div>
-        <div className="top-actions">
-          
-          <AppButton className="share-button">Share</AppButton>
+    <div className="canvas-scroll">
+      <section className="intro">
+        <div>
+          <span className="eyebrow">STEP 1 OF 3 · YOUR IDEAS</span>
+          <h1>{project.challenge}</h1>
         </div>
-      </header>
+        <div className="progress-wrap">
+          <div><span>Idea sparks</span><strong>{round} of {limit}</strong></div>
+          <div className="progress"><span className={`progress-step progress-step-${progressStep}`} /></div>
+        </div>
+      </section>
 
-      <div className="canvas-scroll">
-        <section className="intro">
-          <div>
-            <span className="eyebrow">IDEATION SESSION</span>
-            <h1>{project.challenge}</h1>
+      <section className="techniques-section">
+        <div className="section-title">
+          <div><span className="section-number">01</span><h2>Choose your lens</h2></div>
+          <span>Switch techniques anytime</span>
+        </div>
+        <div className="technique-grid">
+          {techniques.map((technique) => (
+            <AppButton
+              className={`technique-card ${technique.tone} ${selectedTechnique === technique.name ? "selected" : ""}`}
+              key={technique.name}
+              onClick={() => {
+                if (selectedTechnique === technique.name) return;
+                if (draft.trim() || currentThoughts.length) captureEntry();
+                setSelectedTechnique(technique.name as Technique);
+              }}
+            >
+              <span className="technique-icon"><Icon name={technique.icon} /></span>
+              <span><strong>{technique.name}</strong><small>{technique.detail}</small></span>
+              <span className="radio-dot" />
+            </AppButton>
+          ))}
+          <div className="technique-card blank" aria-label="Future ideation technique">
+            <span className="technique-icon"><Icon name="plus" /></span>
+            <span><strong>Open space</strong><small>A new technique will live here</small></span>
           </div>
-          <div className="progress-wrap">
-            <div><span>Idea sparks</span><strong>{round} of {limit}</strong></div>
-            <div className="progress"><span className={`progress-step progress-step-${progressStep}`} /></div>
-          </div>
-        </section>
-
-        <section className="techniques-section">
-          <div className="section-title">
-            <div><span className="section-number">01</span><h2>Choose your lens</h2></div>
-            <span>Switch techniques anytime</span>
-          </div>
-          <div className="technique-grid">
-            {techniques.map((technique) => (
-              <AppButton
-                className={`technique-card ${technique.tone} ${selectedTechnique === technique.name ? "selected" : ""}`}
-                key={technique.name}
-                onClick={() => {
-                  if (selectedTechnique === technique.name) return;
-                  if (draft.trim() || currentThoughts.length || museIdeas.length) captureEntry();
-                  cancelMuse();
-                  setSelectedTechnique(technique.name as Technique);
-                  setCurrentThoughts([]);
-                  setSelectedMuseThoughts([]);
-                  setDraft("");
-                  setMuseRevealed(false);
-                }}
-              >
-                <span className="technique-icon"><Icon name={technique.icon} /></span>
-                <span><strong>{technique.name}</strong><small>{technique.detail}</small></span>
-                <span className="radio-dot" />
-              </AppButton>
+        </div>
+        <div className="session-length">
+          <div><strong>How many sparks?</strong><span>Choose a finish line before you begin.</span></div>
+          <div className="length-options">
+            {[10, 20, 30].map((count) => (
+              <AppButton className={limit === count ? "active" : ""} disabled={round > 1} key={count} onClick={() => setLimit(count)}>{count}</AppButton>
             ))}
-            <div className="technique-card blank" aria-label="Future ideation technique">
-              <span className="technique-icon"><Icon name="plus" /></span>
-              <span><strong>Open space</strong><small>A new technique will live here</small></span>
-            </div>
           </div>
-          <div className="session-length">
-            <div><strong>How many sparks?</strong><span>Choose a finish line before you begin.</span></div>
-            <div className="length-options">
-              {[10, 20, 30].map((count) => (
-                <AppButton
-                  className={limit === count ? "active" : ""}
-                  disabled={round > 1}
-                  key={count}
-                  onClick={() => setLimit(count)}
-                >{count}</AppButton>
-              ))}
-            </div>
-          </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="exercise">
-          <div className="section-title">
-            <div><span className="section-number">02</span><h2>{selectedTechnique === "Photo sparks" ? "Look. React. Connect." : "Step into a new role"}</h2></div>
-            <AppButton className="finish-early" onClick={finishNow}>Finish & review</AppButton>
-          </div>
+      <section className="exercise">
+        <div className="section-title">
+          <div><span className="section-number">02</span><h2>{isPhoto ? "Look. React. Connect." : "Step into a new role"}</h2></div>
+          <AppButton className="finish-early" onClick={finishNow}>Finish & see Muse</AppButton>
+        </div>
 
-          <div className="exercise-grid">
-            {selectedTechnique === "Photo sparks" ? (
-              <div className="photo-card">
-                <img src={photos[photoIndex].url} alt={photos[photoIndex].alt} />
-                <div className="photo-topline"><span><Icon name="image" size={15} /> PHOTO SPARK</span><span>{String(round).padStart(2, "0")} / {limit}</span></div>
-                <div className="photo-footer">
-                  <span>Photo by {photos[photoIndex].credit} on Unsplash</span>
+        <div className="exercise-grid">
+          {isPhoto ? (
+            <div className="photo-card">
+              <img src={photos[photoIndex].url} alt={photos[photoIndex].alt} />
+              <div className="photo-topline"><span><Icon name="image" size={15} /> PHOTO SPARK</span><span>{String(round).padStart(2, "0")} / {limit}</span></div>
+              <div className="photo-footer"><span>Photo by {photos[photoIndex].credit} on Unsplash</span></div>
+            </div>
+          ) : (
+            <div className="role-card">
+              <div className="role-topline"><span><Icon name="play" size={14} /> ROLE {String(round).padStart(2, "0")} / {limit}</span></div>
+              <span className="role-avatar">{roles[roleIndex].initials}</span>
+              <span className="role-label">THINK LIKE A</span>
+              <h3>{roles[roleIndex].name}</h3>
+              <p>{roles[roleIndex].cue}</p>
+              <div className="role-words">{roles[roleIndex].words.map((word) => <span key={word}>{word}</span>)}</div>
+            </div>
+          )}
+
+          <div className="prompt-panel">
+            <div className="thought-step your-thought-step">
+              <div className="thought-exchange-heading">
+                <span className="prompt-kicker">YOUR THOUGHTS</span>
+                <h3>{isPhoto ? "What could this photo mean for your project?" : `How would a ${roles[roleIndex].name.toLowerCase()} solve this?`}</h3>
+                <p>Write or say what comes to mind, as many thoughts as you like. Muse stays quiet until the session is done.</p>
+              </div>
+              <div className="current-thoughts">
+                {currentThoughts.length === 0 && <span className="placeholder-chip">Your thoughts for this {isPhoto ? "photo" : "role"} appear here</span>}
+                {currentThoughts.map((thought) => <span key={thought}>{thought}</span>)}
+              </div>
+              <div className="idea-input">
+                <textarea
+                  aria-label="Your thought"
+                  maxLength={240}
+                  onChange={(event) => setDraft(event.target.value)}
+                  onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); addThought(); } }}
+                  placeholder="Write down what comes to mind… (Enter adds it)"
+                  value={draft}
+                />
+                <div>
+                  <AppButton className={`mic-button ${voiceNote ? "active" : ""}`} aria-label="Speak your thought (coming soon)" title="Voice input is coming soon" onClick={() => setVoiceNote(!voiceNote)}>
+                    <Icon name="mic" size={16} /> {voiceNote ? "Voice input is coming soon" : "Speak"}
+                  </AppButton>
+                  <span>{draft.length} / 240</span>
+                  <AppButton className="add-button" disabled={!draft.trim()} onClick={addThought}><Icon name="plus" size={14} /> Add</AppButton>
                 </div>
               </div>
-            ) : (
-              <div className="role-card">
-                <div className="role-topline"><span><Icon name="play" size={14} /> ROLE {String(round).padStart(2, "0")} / {limit}</span></div>
-                <span className="role-avatar">{roles[roleIndex].initials}</span>
-                <span className="role-label">THINK LIKE A</span>
-                <h3>{roles[roleIndex].name}</h3>
-                <p>{roles[roleIndex].cue}</p>
-                <div className="role-words">{roles[roleIndex].words.map((word) => <span key={word}>{word}</span>)}</div>
-                <AppButton className="next-role-button" onClick={nextStimulus}>{round >= limit ? "Review session" : "Next role"} <Icon name="arrow" size={16} /></AppButton>
+              <div className="exchange-footer">
+                <span>{currentThoughts.length + (draft.trim() ? 1 : 0)} {currentThoughts.length + (draft.trim() ? 1 : 0) === 1 ? "thought" : "thoughts"} on this {isPhoto ? "photo" : "role"}</span>
+                <AppButton className="next-spark-button" onClick={nextStimulus}>{nextLabel} <Icon name="arrow" size={16} /></AppButton>
               </div>
-            )}
-
-            <div className="prompt-panel">
-              {!museRevealed ? (
-                <div className="thought-step your-thought-step">
-                  <div className="thought-exchange-heading">
-                    <span className="prompt-kicker">STEP 1 · YOUR THOUGHTS</span>
-                    <h3>{selectedTechnique === "Photo sparks" ? "What does this photo spark?" : `How would a ${roles[roleIndex].name.toLowerCase()} solve this?`}</h3>
-                    <p>Describe what you notice and what it makes you think. Next sends your words to Muse to build on them.</p>
-                  </div>
-                  <div className="exchange-label">
-                    <span className="exchange-avatar">YOU</span>
-                    <div><strong>Your thoughts</strong><small>Words, fragments, or a small idea</small></div>
-                  </div>
-                  <div className="current-thoughts">
-                    {currentThoughts.map((thought) => <span key={thought}>{thought}</span>)}
-                  </div>
-                  <div className="idea-input">
-                    <textarea
-                      aria-label="Your thought"
-                      maxLength={240}
-                      onChange={(event) => setDraft(event.target.value)}
-                      placeholder="Write down what comes to mind..."
-                      value={draft}
-                    />
-                    <div>
-                      <span>{draft.length} / 240</span>
-                      <AppButton className="add-button" disabled={!draft.trim() && currentThoughts.length === 0} onClick={revealMuse}>
-                        Next <Icon name="arrow" size={16} />
-                      </AppButton>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="thought-step muse-thought-step">
-                  <div className="thought-exchange-heading muse-heading">
-                    <span className="prompt-kicker"><Icon name="spark" size={14} /> STEP 2 · MUSE’S THOUGHTS</span>
-                    <h3>Which ideas feel worth keeping?</h3>
-                    <p>{loading ? "Muse is thinking…" : `Muse found ${museIdeas.length} small directions. Select any that spark something for you.`}</p>
-                  </div>
-                  {!loading && !museIdeas.length && !museError && <AppButton onClick={revealMuse}>Retry Muse</AppButton>}
-                  {museError && <div role="alert"><p>{museError}</p><AppButton onClick={revealMuse}>Retry</AppButton></div>}
-                  <div className="muse-thoughts">
-                    {museIdeas.map((thought) => {
-                      const selected = selectedMuseThoughts.includes(thought);
-                      return (
-                        <AppButton
-                          aria-pressed={selected}
-                          className={selected ? "selected" : ""}
-                          key={thought}
-                          onClick={() => toggleMuseThought(thought)}
-                        >
-                          <Icon name="spark" size={12} /> {thought}
-                        </AppButton>
-                      );
-                    })}
-                  </div>
-                  <div className="exchange-footer">
-                    <span>{selectedMuseThoughts.length} {selectedMuseThoughts.length === 1 ? "idea" : "ideas"} selected and saved</span>
-                    <AppButton className="next-spark-button" onClick={nextStimulus}>
-                      {round >= limit ? "Review session" : selectedTechnique === "Photo sparks" ? "Next photo" : "Next role"} <Icon name="arrow" size={16} />
-                    </AppButton>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="ideas-section">
-          <div className="section-title">
-            <div><span className="section-number">03</span><h2>Thought trail</h2></div>
-            <span>{ideas.length} small sparks saved</span>
-          </div>
-          <div className="ideas-list">
-            {ideas.length === 0 && <div className="empty-trail">Your words will gather here as you move through the session.</div>}
-            {ideas.map((idea, index) => (
-              <article className="idea-note" key={`${idea}-${index}`}>
-                <span className="idea-count">{String(index + 1).padStart(2, "0")}</span>
-                <p>{idea}</p>
-                <AppButton className="icon-button" aria-label="Open thought"><Icon name="arrow" /></AppButton>
-              </article>
-            ))}
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function ReviewCanvas({ project, entries, onRestart }: { project: Project; entries: SessionEntry[]; onRestart: () => void }) {
-  const [reflection, setReflection] = useField("reflection", "");
-  const [aiComparison, setAiComparison] = useField("aiComparison", "");
-
-  function compareWithAi() {
-    const userWords = entries.flatMap((entry) => entry.userThoughts).filter(Boolean);
-    const aiWords = entries.flatMap((entry) => entry.selectedAiThoughts);
-    const userSignal = userWords.slice(0, 3).join(", ") || "open space";
-    const aiSignal = aiWords.slice(0, 3).join(", ") || "no saved Muse ideas";
-    setAiComparison(`You focused on ${userSignal}. Muse noticed ${aiSignal}. The interesting territory may be where your concrete observations meet Muse’s broader patterns.`);
-  }
-
-  return (
-    <main className="workspace review-workspace">
-      <header className="topbar">
-        <div className="breadcrumb"><span>Community bookstore</span><Icon name="chevron" size={14} /><strong>Session review</strong></div>
-        <AppButton className="share-button" onClick={onRestart}>Start over</AppButton>
-      </header>
-      <div className="canvas-scroll review-scroll">
-        <section className="review-hero">
-          <span className="eyebrow">SESSION COMPLETE</span>
-          <h1>Now compare what you saw.</h1>
-          <p>Muse built on your observations and associations. Read both sides first. Find your own patterns before asking AI to interpret them.</p>
-          <div className="review-stats"><strong>{entries.length}</strong><span>prompts explored</span><strong>{entries.flatMap((entry) => entry.userThoughts).length}</strong><span>thoughts from you</span></div>
-        </section>
-
-        <section className="comparison-section">
-          <div className="section-title">
-            <div><span className="section-number">01</span><h2>Your view, next to Muse</h2></div>
-            <span>Look for overlaps, gaps, and surprises</span>
-          </div>
-          <div className="comparison-list">
-            {entries.map((entry) => (
-              <article className="comparison-card" key={entry.id}>
-                <div className="comparison-source">
-                  {entry.imageUrl ? <img src={entry.imageUrl} alt="Session prompt" /> : <span className="role-review-avatar">{entry.label.slice(0, 2).toUpperCase()}</span>}
-                  <div><span>SPARK {String(entry.id).padStart(2, "0")}</span><strong>{entry.label}</strong></div>
-                </div>
-                <div className="thought-column human-column">
-                  <span>YOU SAW</span>
-                  <div>{entry.userThoughts.length ? entry.userThoughts.map((thought) => <em key={thought}>{thought}</em>) : <em>no words — just a feeling</em>}</div>
-                </div>
-                <div className="thought-column ai-column">
-                  <span>YOU SAVED FROM MUSE</span>
-                  <div>
-                    {entry.selectedAiThoughts.length
-                      ? entry.selectedAiThoughts.map((thought) => <em className="selected" key={thought}>{thought}</em>)
-                      : <em className="empty-selection">no Muse ideas saved</em>}
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section className="self-review">
-          <div className="section-title">
-            <div><span className="section-number">02</span><h2>Make your comparison</h2></div>
-            <span>Your interpretation comes first</span>
-          </div>
-          <div className="reflection-card">
-            <div>
-              <span className="prompt-kicker">WHAT DO YOU NOTICE?</span>
-              <h3>Where did you agree? What did Muse miss? What surprised you?</h3>
-              <p>Write the pattern in your own words. This is where the ideas start becoming yours.</p>
-            </div>
-            <textarea aria-label="Your comparison" onChange={(event) => setReflection(event.target.value)} placeholder="I kept noticing... Muse saw... The surprising connection is..." value={reflection} />
-          </div>
-        </section>
-
-        <section className="ai-review-section">
-          <div className="section-title">
-            <div><span className="section-number">03</span><h2>Then invite Muse in</h2></div>
-            <span>AI adds a second reading, not the final answer</span>
-          </div>
-          <div className="ai-review-card">
-            <div className="agent-orb"><Icon name="spark" size={18} /></div>
-            <div>
-              <strong>Muse can compare both trails</strong>
-              <p>{aiComparison || "Once you write your own comparison, Muse can look for themes across both sets of thoughts."}</p>
-            </div>
-            <AppButton className="compare-button" disabled={!reflection.trim()} onClick={compareWithAi}>{aiComparison ? "Compare again" : "Ask Muse to compare"}<Icon name="arrow" size={16} /></AppButton>
-          </div>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-function ProjectSession({project}: {project:Project}) {
- const {set:setSessionField}=useContext(SessionContext);
-  const [photoIndex, setPhotoIndex] = useField("photoIndex", 0);
-  const [roleIndex, setRoleIndex] = useField("roleIndex", 0);
-  const [round, setRound] = useField("round", 1);
-  const [limit, setLimit] = useField("limit", 20);
-  const [stage, setStage] = useField<Stage>("stage", "ideate");
-  const [selectedTechnique, setSelectedTechnique] = useField<Technique>("selectedTechnique", "Photo sparks");
-  const [ideas, setIdeas] = useField<string[]>("ideas", []);
-  const [entries, setEntries] = useField<SessionEntry[]>("entries", []);
-  const [museRevealed, setMuseRevealed] = useField("museRevealed", false);
-
-  function restartSession() {
-    if (!confirm("Replace this project’s session and start over?")) return;
-    setSessionField("draft", ""); setSessionField("currentThoughts", []); setSessionField("selectedMuseThoughts", []); setSessionField("museIdeas", []); setSessionField("reflection", ""); setSessionField("aiComparison", "");
-    setPhotoIndex(0);
-    setRoleIndex(0);
-    setRound(1);
-    setStage("ideate");
-    setIdeas([]);
-    setEntries([]);
-    setMuseRevealed(false);
-  }
-
-  return (
-    <div className="app-shell">
-      {stage === "ideate" ? (
-        <MainCanvas project={project}
-          entries={entries}
-          ideas={ideas}
-          limit={limit}
-          museRevealed={museRevealed}
-          onFinish={() => setStage("review")}
-          photoIndex={photoIndex}
-          roleIndex={roleIndex}
-          round={round}
-          selectedTechnique={selectedTechnique}
-          setEntries={setEntries}
-          setIdeas={setIdeas}
-          setLimit={setLimit}
-          setMuseRevealed={setMuseRevealed}
-          setPhotoIndex={setPhotoIndex}
-          setRoleIndex={setRoleIndex}
-          setRound={setRound}
-          setSelectedTechnique={setSelectedTechnique}
-        />
-      ) : (
-        <ReviewCanvas project={project} entries={entries} onRestart={restartSession} />
-      )}
+      <section className="ideas-section">
+        <div className="section-title">
+          <div><span className="section-number">03</span><h2>Thought trail</h2></div>
+          <span>{allThoughts.length} {allThoughts.length === 1 ? "thought" : "thoughts"} so far</span>
+        </div>
+        <div className="ideas-list">
+          {allThoughts.length === 0 && <div className="empty-trail">Your words will gather here as you move through the session.</div>}
+          {allThoughts.map((idea, index) => (
+            <article className="idea-note" key={`${idea}-${index}`}>
+              <span className="idea-count">{String(index + 1).padStart(2, "0")}</span>
+              <p>{idea}</p>
+            </article>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
 
-export default function App(){
- const [projects,setProjects]=useState<Project[]>([]),[project,setProject]=useState<Project|null>(null),[data,setData]=useState<Session>({}),[error,setError]=useState(""),[status,setStatus]=useState(""),[form,setForm]=useState<{id?:string;name:string;challenge:string}|null>(null);
- const revision=useRef(0), latest=useRef(data), saved=useRef(data), saving=useRef<Promise<void>|null>(null);latest.current=data;
- async function list(){try{setProjects(await api<Project[]>("/api/projects"));setError("");}catch(e){setError(String(e));}}
- useEffect(()=>{void list();},[]);
- async function open(id:string){try{const r=await api<{project:Project;data:Session;revision:number}>(`/api/projects/${id}`);revision.current=r.revision;saved.current=r.data;latest.current=r.data;setData(r.data);setProject(r.project);setStatus("Saved");setError("");}catch(e){setError(String(e));}}
- async function flush(){if(saving.current)await saving.current; if(latest.current===saved.current)return;const snapshot=latest.current;setStatus("Saving…");const job=api<{revision:number}>(`/api/projects/${project!.id}/session`,"PUT",{data:snapshot,revision:revision.current}).then(r=>{revision.current=r.revision;saved.current=snapshot;setStatus("Saved");}).catch(e=>{setStatus(String(e).includes("conflict")?"Conflict":"Save failed");throw e;});saving.current=job;try{await job;}finally{saving.current=null;}}
- useEffect(()=>{if(!project||data===saved.current)return;setStatus("Unsaved");const timer=setTimeout(()=>void flush().catch(()=>{}),500);return()=>clearTimeout(timer);},[data,project]);
- useEffect(()=>{const warn=(e:BeforeUnloadEvent)=>{if(latest.current!==saved.current){e.preventDefault();}};window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);},[]);
- async function leave(){try{while(latest.current!==saved.current)await flush();}catch{if(!confirm("Save failed. Leave without saving?"))return;}setProject(null);void list();}
- return <><nav className="project-nav">{project&&<><button onClick={leave}>My projects</button><span role="status">{status}</span><button onClick={()=>void flush().catch(()=>{})}>Retry save</button>{status==="Conflict"&&<><button onClick={()=>{if(confirm("Discard local changes and reload?"))void open(project.id);}}>Reload saved version</button><button onClick={async()=>{if(!confirm("Replace the saved session with this version?"))return;try{const r=await api<{revision:number}>(`/api/projects/${project.id}`);revision.current=r.revision;await flush();}catch(e){setError(String(e));}}}>Replace with this version</button></>}</>}</nav>{error&&<p role="alert">{error}<button onClick={list}>Retry</button></p>}
- {project?<SessionContext.Provider value={{data,set:(key,value)=>setData(old=>({...old,[key]:value}))}}><ProjectSession key={project.id} project={project}/></SessionContext.Provider>:<main className="projects-page"><h1>My projects</h1><p>A space for each question you want to explore.</p><button onClick={()=>setForm({name:"",challenge:""})}>Create project</button>{!projects.length&&!error&&<p>No projects yet. Create your first project.</p>}{projects.map(p=><article key={p.id}><h2>{p.name}</h2><p>{p.challenge}</p><small>Updated {p.updatedAt}</small><div><button onClick={()=>void open(p.id)}>Open</button><button onClick={()=>setForm(p)}>Edit</button><button onClick={async()=>{if(!confirm("Delete this project and its session?"))return;try{await api(`/api/projects/${p.id}`,"DELETE");await list();}catch(e){setError(String(e));}}}>Delete</button></div></article>)}</main>}
- {form&&<div className="project-modal"><form onSubmit={async e=>{e.preventDefault();try{const r=await api<{id:string}>(form.id?`/api/projects/${form.id}`:"/api/projects",form.id?"PATCH":"POST",form);setForm(null);await list();if(!form.id)await open(r.id);}catch(e){setError(String(e));}}}><h2>{form.id?"Edit project":"Create project"}</h2><label>Name<input required maxLength={100} value={form.name} onChange={e=>setForm({...form,name:e.target.value})}/></label><label>Challenge<textarea required maxLength={1000} value={form.challenge} onChange={e=>setForm({...form,challenge:e.target.value})}/></label><p>Changes apply to future ideas. Existing work stays saved.</p><button>Save project</button><button type="button" onClick={()=>setForm(null)}>Cancel</button></form></div>}</>;
+/* ---------- Step 2: review (Muse appears, pick from both) ---------- */
+
+function useMuseReadings(project: Project, entries: SessionEntry[]) {
+  const [readings, setReadings] = useField<Record<string, MuseReading>>("museReadings", {});
+  const latest = useRef(readings);
+  latest.current = readings;
+  const running = useRef(false);
+
+  async function load(entry: SessionEntry) {
+    const put = (r: MuseReading) => { latest.current = { ...latest.current, [entry.id]: r }; setReadings(latest.current); };
+    put({ status: "loading", ideas: [] });
+    try {
+      const technique: Technique = entry.technique ?? (entry.imageUrl ? "Photo sparks" : "Role play");
+      const body: MuseRequest = { projectId: project.id, technique, role: technique === "Role play" ? entry.label : undefined, stimulus: entry.stimulus ?? entry.label, thoughts: entry.userThoughts };
+      const data = await api<MuseResponse>("/api/muse", "POST", body);
+      put({ status: "done", ideas: data.ideas.slice(0, MUSE_PER_SPARK) });
+    } catch {
+      put({ status: "error", ideas: [] });
+    }
+  }
+
+  useEffect(() => {
+    if (running.current) return;
+    running.current = true;
+    (async () => {
+      for (const entry of entries) {
+        const r = latest.current[entry.id];
+        if (!entry.userThoughts.length || (r && r.status !== "loading")) continue;
+        await load(entry);
+      }
+      running.current = false;
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length]);
+
+  return { readings, retry: load };
+}
+
+function SourceThumb({ entry }: { entry: SessionEntry }) {
+  return entry.imageUrl ? <img src={entry.imageUrl} alt={entry.stimulus} /> : <span className="role-review-avatar">{entry.label.slice(0, 2).toUpperCase()}</span>;
+}
+
+function ReviewCanvas({ project, entries, onBack, onContinue }: { project: Project; entries: SessionEntry[]; onBack: () => void; onContinue: () => void }) {
+  const [picks, setPicks] = useField<Pick[]>("picks", []);
+  const { readings, retry } = useMuseReadings(project, entries);
+  const toggle = (pick: Pick) => setPicks((old) => (old.some((p) => samePick(p, pick)) ? old.filter((p) => !samePick(p, pick)) : [...old, pick]));
+  const isPicked = (pick: Pick) => picks.some((p) => samePick(p, pick));
+  const yours = picks.filter((p) => p.source === "you").length;
+  const muse = picks.length - yours;
+
+  return (
+    <div className="canvas-scroll review-scroll">
+      <section className="review-hero">
+        <span className="eyebrow">STEP 2 OF 3 · COMPARE WITH MUSE</span>
+        <h1>Now see what Muse noticed.</h1>
+        <p>Read your own thoughts first, then Muse’s reading of each {entries.some((e) => e.imageUrl) ? "photo" : "spark"}. Tap the ideas worth keeping, from either side. They move on with you to the next session.</p>
+        <div className="review-stats"><strong>{entries.length}</strong><span>sparks explored</span><strong>{entries.flatMap((e) => e.userThoughts).length}</strong><span>thoughts from you</span></div>
+      </section>
+
+      <section className="comparison-section">
+        <div className="section-title">
+          <div><span className="section-number">01</span><h2>Your view, next to Muse</h2></div>
+          <span>Look for overlaps, gaps and surprises</span>
+        </div>
+        <div className="comparison-list">
+          {entries.length === 0 && <div className="empty-trail">No sparks were captured in this session. Go back and write a few thoughts first.</div>}
+          {entries.map((entry) => {
+            const reading = readings[entry.id];
+            return (
+              <article className="comparison-card" key={entry.id}>
+                <div className="comparison-source">
+                  <SourceThumb entry={entry} />
+                  <div><span>SPARK {String(entry.id).padStart(2, "0")}</span><strong>{entry.label}</strong></div>
+                </div>
+                <div className="thought-column human-column">
+                  <span>YOUR THOUGHTS</span>
+                  <div>
+                    {entry.userThoughts.length ? entry.userThoughts.map((text) => {
+                      const pick: Pick = { entryId: entry.id, source: "you", text };
+                      return <AppButton aria-pressed={isPicked(pick)} className={`pick-chip you ${isPicked(pick) ? "picked" : ""}`} key={text} onClick={() => toggle(pick)}>{isPicked(pick) && <Icon name="check" size={11} />}{text}</AppButton>;
+                    }) : <em className="empty-selection">You skipped this one</em>}
+                  </div>
+                </div>
+                <div className="thought-column ai-column">
+                  <span><Icon name="spark" size={10} /> MUSE’S THOUGHTS</span>
+                  <div>
+                    {!entry.userThoughts.length && <em className="empty-selection">Muse builds on your words, so nothing here yet</em>}
+                    {entry.userThoughts.length > 0 && (!reading || reading.status === "loading") && <em className="loading-chip">Muse is reading this {entry.imageUrl ? "photo" : "role"}…</em>}
+                    {reading?.status === "error" && <AppButton className="pick-chip retry" onClick={() => void retry(entry)}>Muse couldn’t answer. Retry</AppButton>}
+                    {reading?.status === "done" && reading.ideas.map((text) => {
+                      const pick: Pick = { entryId: entry.id, source: "muse", text };
+                      return <AppButton aria-pressed={isPicked(pick)} className={`pick-chip muse ${isPicked(pick) ? "picked" : ""}`} key={text} onClick={() => toggle(pick)}>{isPicked(pick) ? <Icon name="check" size={11} /> : <Icon name="spark" size={10} />}{text}</AppButton>;
+                    })}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="selection-bar">
+        <AppButton className="text-button" onClick={onBack}><Icon name="back" size={14} /> Back to session</AppButton>
+        <span><strong>{yours}</strong> of yours · <strong>{muse}</strong> from Muse selected</span>
+        <AppButton className="primary-button" disabled={!picks.length} onClick={onContinue}>Continue with {picks.length || ""} {picks.length === 1 ? "idea" : "ideas"} <Icon name="arrow" size={16} /></AppButton>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Step 3: shortlist (new session, pairing comes later) ---------- */
+
+function ShortlistCanvas({ entries, onBack, onRestart }: { entries: SessionEntry[]; onBack: () => void; onRestart: () => void }) {
+  const [picks] = useField<Pick[]>("picks", []);
+  const entryFor = (id: number) => entries.find((e) => e.id === id);
+  const groups: { source: Pick["source"]; title: string }[] = [{ source: "you", title: "Your ideas" }, { source: "muse", title: "From Muse" }];
+
+  return (
+    <div className="canvas-scroll review-scroll">
+      <section className="review-hero">
+        <span className="eyebrow">STEP 3 OF 3 · BUILD ON THE SHORTLIST</span>
+        <h1>Your shortlist.</h1>
+        <p>These are the ideas you kept. Next, you will pair one of yours with one from Muse and develop the combination into a stronger direction.</p>
+      </section>
+
+      <section className="shortlist-columns">
+        {groups.map((group) => {
+          const items = picks.filter((p) => p.source === group.source);
+          return (
+            <div className="shortlist-column" key={group.source}>
+              <div className="section-title"><div><h2>{group.title}</h2></div><span>{items.length} selected</span></div>
+              {items.length === 0 && <div className="empty-trail">None selected</div>}
+              {items.map((pick) => {
+                const entry = entryFor(pick.entryId);
+                return (
+                  <article className={`shortlist-card ${pick.source}`} key={`${pick.entryId}-${pick.text}`}>
+                    {entry && <SourceThumb entry={entry} />}
+                    <div><small>{entry?.label ?? "Spark"}</small><p>{pick.text}</p></div>
+                  </article>
+                );
+              })}
+            </div>
+          );
+        })}
+      </section>
+
+      <section className="pairing-teaser">
+        <span className="agent-orb"><Icon name="spark" size={18} /></span>
+        <div>
+          <strong>Pairing comes next</strong>
+          <p>Combine an idea of yours with one from Muse to form a new direction. This part of the flow is still being designed.</p>
+        </div>
+        <AppButton className="primary-button" disabled>Start pairing <Icon name="arrow" size={16} /></AppButton>
+      </section>
+
+      <div className="selection-bar plain">
+        <AppButton className="text-button" onClick={onBack}><Icon name="back" size={14} /> Back to review</AppButton>
+        <AppButton className="text-button danger" onClick={onRestart}>Start a new session</AppButton>
+      </div>
+    </div>
+  );
+}
+
+function ProjectSession({ project }: { project: Project }) {
+  const { set } = useContext(SessionContext);
+  const [stage, setStage] = useField<Stage>("stage", "ideate");
+  const [entries] = useField<SessionEntry[]>("entries", []);
+
+  function restartSession() {
+    if (!confirm("Clear this project’s session and start over?")) return;
+    for (const [key, value] of Object.entries({ draft: "", currentThoughts: [], entries: [], picks: [], museReadings: {}, photoIndex: 0, roleIndex: 0, round: 1 })) set(key, value);
+    setStage("ideate");
+  }
+
+  return (
+    <main className="workspace">
+      {stage === "ideate" && <MainCanvas project={project} onFinish={() => setStage("review")} />}
+      {stage === "review" && <ReviewCanvas project={project} entries={entries} onBack={() => setStage("ideate")} onContinue={() => setStage("shortlist")} />}
+      {stage === "shortlist" && <ShortlistCanvas entries={entries} onBack={() => setStage("review")} onRestart={restartSession} />}
+    </main>
+  );
+}
+
+/* ---------- App shell: data, saving, routing ---------- */
+
+const stageNames: Record<Stage, string> = { ideate: "Session", review: "Compare with Muse", shortlist: "Shortlist" };
+
+export default function App() {
+  const [view, setView] = useState<View>("home");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [project, setProject] = useState<Project | null>(null);
+  const [data, setData] = useState<Session>({});
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [form, setForm] = useState<{ id?: string; name: string; challenge: string } | null>(null);
+  const revision = useRef(0), latest = useRef(data), saved = useRef(data), saving = useRef<Promise<void> | null>(null);
+  latest.current = data;
+
+  async function list() { try { setProjects(await api<Project[]>("/api/projects")); setError(""); } catch (e) { setError(String(e)); } }
+  useEffect(() => { void list(); }, []);
+  async function open(id: string) { try { const r = await api<{ project: Project; data: Session; revision: number }>(`/api/projects/${id}`); revision.current = r.revision; saved.current = r.data; latest.current = r.data; setData(r.data); setProject(r.project); setStatus("Saved"); setError(""); window.scrollTo(0, 0); } catch (e) { setError(String(e)); } }
+  async function flush() { if (saving.current) await saving.current; if (latest.current === saved.current) return; const snapshot = latest.current; setStatus("Saving…"); const job = api<{ revision: number }>(`/api/projects/${project!.id}/session`, "PUT", { data: snapshot, revision: revision.current }).then((r) => { revision.current = r.revision; saved.current = snapshot; setStatus("Saved"); }).catch((e) => { setStatus(String(e).includes("conflict") ? "Conflict" : "Save failed"); throw e; }); saving.current = job; try { await job; } finally { saving.current = null; } }
+  useEffect(() => { if (!project || data === saved.current) return; setStatus("Unsaved"); const timer = setTimeout(() => void flush().catch(() => {}), 500); return () => clearTimeout(timer); }, [data, project]);
+  useEffect(() => { const warn = (e: BeforeUnloadEvent) => { if (latest.current !== saved.current) e.preventDefault(); }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, []);
+  async function leave(to: View) { if (project) { try { while (latest.current !== saved.current) await flush(); } catch { if (!confirm("Save failed. Leave without saving?")) return; } setProject(null); void list(); } setView(to); window.scrollTo(0, 0); }
+
+  const stage = (data.stage as Stage | undefined) ?? "ideate";
+  const statusTone = status === "Saved" ? "ok" : status === "Conflict" || status === "Save failed" ? "bad" : "busy";
+
+  const right = project ? (
+    <>
+      <span className={`save-pill ${statusTone}`} role="status"><span />{status}</span>
+      {status === "Save failed" && <AppButton className="text-button" onClick={() => void flush().catch(() => {})}>Retry save</AppButton>}
+      {status === "Conflict" && <>
+        <AppButton className="text-button" onClick={() => { if (confirm("Discard local changes and reload?")) void open(project.id); }}>Reload saved</AppButton>
+        <AppButton className="text-button" onClick={async () => { if (!confirm("Replace the saved session with this version?")) return; try { const r = await api<{ revision: number }>(`/api/projects/${project.id}`); revision.current = r.revision; await flush(); } catch (e) { setError(String(e)); } }}>Keep this version</AppButton>
+      </>}
+    </>
+  ) : view === "home" ? (
+    <AppButton className="primary-button small" onClick={() => void leave("projects")}>Start a session</AppButton>
+  ) : null;
+
+  return (
+    <div className="app-shell">
+      <SiteHeader
+        crumbs={project ? [project.name, stageNames[stage]] : view === "projects" ? [] : undefined}
+        onHome={() => void leave("home")}
+        onProjects={() => void leave("projects")}
+        right={right}
+      />
+      {error && <p className="error-banner" role="alert">{error} <AppButton className="text-button" onClick={list}>Retry</AppButton></p>}
+      {project ? (
+        <SessionContext.Provider value={{ data, set: (key, value) => setData((old) => ({ ...old, [key]: value })) }}>
+          <ProjectSession key={project.id} project={project} />
+        </SessionContext.Provider>
+      ) : view === "home" ? (
+        <HomePage onStart={() => void leave("projects")} />
+      ) : (
+        <ProjectsPage
+          projects={projects}
+          onOpen={(id) => void open(id)}
+          onEdit={(p) => setForm(p)}
+          onCreate={() => setForm({ name: "", challenge: "" })}
+          onDelete={async (p) => { if (!confirm(`Delete “${p.name}” and its session?`)) return; try { await api(`/api/projects/${p.id}`, "DELETE"); await list(); } catch (e) { setError(String(e)); } }}
+        />
+      )}
+      {form && (
+        <div className="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-form-title">
+          <form onSubmit={async (e) => { e.preventDefault(); try { const r = await api<{ id: string }>(form.id ? `/api/projects/${form.id}` : "/api/projects", form.id ? "PATCH" : "POST", form); setForm(null); await list(); if (!form.id) await open(r.id); } catch (e) { setError(String(e)); } }}>
+            <span className="eyebrow">{form.id ? "EDIT PROJECT" : "NEW PROJECT"}</span>
+            <h2 id="project-form-title">{form.id ? "Edit project" : "What do you want to explore?"}</h2>
+            <label htmlFor="project-name">Name</label>
+            <input id="project-name" required maxLength={100} placeholder="Community bookstore" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            <label htmlFor="project-challenge">Challenge question</label>
+            <textarea id="project-challenge" required maxLength={1000} placeholder="How might we…" value={form.challenge} onChange={(e) => setForm({ ...form, challenge: e.target.value })} />
+            <p>Changes apply to future ideas. Existing work stays saved.</p>
+            <div className="modal-actions">
+              <AppButton className="text-button" onClick={() => setForm(null)}>Cancel</AppButton>
+              <AppButton className="primary-button" type="submit">{form.id ? "Save changes" : "Create project"}</AppButton>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
 }
