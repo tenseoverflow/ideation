@@ -23,3 +23,4 @@ The Vite dev server sets `ALLOW_LOCAL=true` and `MOCK_AI=true` automatically; no
 Configure `UNSPLASH_ACCESS_KEY` in the local `.dev.vars` file and as a Cloudflare Worker secret (`bunx wrangler secret put UNSPLASH_ACCESS_KEY`). Keep this key out of frontend code. Photo sparks fetches randomized batches across Unsplash; queues persist with the project session. Missing credentials or Unsplash errors show a retry state. New sessions receive a fresh queue. The homepage demonstration remains illustrative.
 
 In review, Photo sparks uses Workers AI Llama 4 Scout to read the displayed image together with the project challenge and the user's thoughts. Role play remains text-only. Speech transcription/grouping does not receive image context. Run `bun run dev:ai` for live Workers AI testing.
+
