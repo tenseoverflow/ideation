@@ -42,7 +42,7 @@ function MockWindow({ crumb, children, big }: { crumb: string; children: React.R
 
 type TypeFrame = { photo: number; round: number; chips: string[]; draft: string; press: "enter" | "next" | null };
 const typingScript = [
-  { photo: 0, thoughts: ["stacked colours, like book spines", "a street of tiny shops"] },
+  { photo: 0, thoughts: ["stacked colours, like book spines", "a street of tiny shops", "paint each shelf a mood"] },
   { photo: 1, thoughts: ["huts = summer pop-up bookshops"] },
   { photo: 2, thoughts: ["arrange books by mood, not genre"] },
 ];
@@ -80,6 +80,7 @@ function TypingDemo() {
         <div className="demo-panel">
           <small className="kicker">YOUR THOUGHTS</small>
           <b>What could this photo mean for your project?</b>
+          <div className={`demo-count ${f.chips.length >= 3 ? "met" : ""}`}>{f.chips.length >= 3 ? <Icon name="check" size={11} /> : null}{f.chips.length} {f.chips.length === 1 ? "thought" : "thoughts"} on this photo{f.chips.length < 3 ? " · aim for 3 or more" : ""}</div>
           <div className="mock-chips demo-chips">
             {f.chips.length === 0 && <span className="ghost">Your thoughts appear here</span>}
             {f.chips.map((chip) => <span className="you pop" key={chip}>{chip}</span>)}
@@ -196,13 +197,14 @@ const walkthrough: WalkStep[] = [
     where: "SESSION · SETUP",
     title: "Pick a technique and how long to go",
     text: "Choose what you want to react to, and set a finish line for the session.",
-    todo: ["Choose Photo sparks or Role play", "Choose 10, 20 or 30 sparks"],
+    todo: ["Choose Photo sparks, Role play or Worst idea", "Choose 10, 20 or 30 sparks"],
     tip: "New here? Start with Photo sparks and 10 sparks.",
     visual: (
       <MockWindow crumb="Community bookstore › Session">
         <div className="mock-lenses">
           <div className="mock-lens violet selected"><Icon name="image" size={14} /><span><b>Photo sparks</b><small>React to random images</small></span><i /></div>
           <div className="mock-lens yellow"><Icon name="play" size={14} /><span><b>Role play</b><small>Solve it through new eyes</small></span></div>
+          <div className="mock-lens rose"><Icon name="bulb" size={14} /><span><b>Worst idea</b><small>Bad ideas only</small></span></div>
         </div>
         <div className="mock-length"><span>How many sparks?</span><div><b className="on">10</b><b>20</b><b>30</b></div></div>
       </MockWindow>
@@ -212,8 +214,9 @@ const walkthrough: WalkStep[] = [
     short: "Look and write",
     where: "SESSION · PART 1 · ON YOUR OWN",
     title: "Look at the photo. Write what it makes you think of.",
-    text: "One photo at a time. Any word, feeling or half idea counts. Muse stays quiet, so every idea here is yours.",
-    actions: [{ icon: "eye", label: "Look" }, { icon: "pen", label: "Type or speak" }, { icon: "check", label: "Press Enter" }, { icon: "arrow", label: "Next photo" }],
+    text: "Write one thought and press Enter. It appears above the box. Then keep going: try at least 3 different ideas for each photo before you click Next photo. There is no upper limit. Muse isn’t involved yet, so every idea here is yours.",
+    actions: [{ icon: "eye", label: "Look" }, { icon: "pen", label: "Write a thought" }, { icon: "check", label: "Press Enter" }, { icon: "repeat", label: "Do it 3+ times" }, { icon: "arrow", label: "Next photo" }],
+    tip: "Your first idea is usually the obvious one. The second and third are where it gets interesting.",
     repeat: "Repeat for every photo until you reach your finish line: 10, 20 or 30.",
     feature: true,
     visual: <TypingDemo />,
@@ -222,7 +225,7 @@ const walkthrough: WalkStep[] = [
     short: "Pick with Muse",
     where: "SESSION · PART 2 · WITH MUSE",
     title: "Tap the ideas you like, yours and Muse’s",
-    text: "When you finish, Muse reads every photo and your words, and adds its own ideas next to yours. Now you choose.",
+    text: "When you finish, you see Muse’s ideas for the same photos next to yours. Muse did the exercise on its own, so expect overlaps, gaps and surprises. Now you choose and mix.",
     actions: [{ icon: "eye", label: "Read yours" }, { icon: "spark", label: "See Muse’s" }, { icon: "hand", label: "Tap to keep" }, { icon: "arrow", label: "Continue" }],
     tip: "Look for places where you and Muse saw the same photo differently. That gap is often where the best idea is.",
     feature: true,
@@ -256,8 +259,9 @@ const mindsets: { icon: IconName; title: string; text: string }[] = [
 ];
 
 const techniques = [
-  { tone: "violet", icon: "image" as IconName, name: "Photo sparks", origin: "Random stimulus", text: "An unrelated image forces your brain to build a bridge back to your problem. It is a classic lateral-thinking method for escaping the obvious answer.", good: "Breaking out of familiar ideas" },
-  { tone: "yellow", icon: "play" as IconName, name: "Role play", origin: "Role storming", text: "Step into someone else’s shoes, like a captain or a chef, and solve the problem the way they would.", good: "Seeing the problem from a new angle" },
+  { tone: "violet", icon: "image" as IconName, name: "Photo sparks", origin: "the random picture generator", text: "A random picture appears and you connect it to your question. Because the image has nothing to do with your problem, your brain has to build new bridges, which pulls you away from the obvious answer.", good: "Breaking out of familiar ideas" },
+  { tone: "yellow", icon: "play" as IconName, name: "Role play", origin: "classic role play", text: "Step into someone else’s shoes, like a captain or a chef, and solve the problem the way they would.", good: "Seeing the problem from a new angle" },
+  { tone: "rose", icon: "bulb" as IconName, name: "Worst idea", origin: "the classic worst idea exercise", text: "Invite a few people into your brainstorm, like an engineer, a doctor or a dancer, and take turns coming up with the worst ideas you can as each of them. A terrible idea from one view often flips into a great one from another.", good: "Getting unstuck and loosening up" },
 ];
 
 export function HomePage({ onStart }: { onStart: () => void }) {
@@ -284,13 +288,14 @@ export function HomePage({ onStart }: { onStart: () => void }) {
         <div className="home-section-head">
           <span className="eyebrow">WHY MUSE</span>
           <h2>AI shouldn’t be your easy button</h2>
-          <p>AI can hand you a polished answer in seconds. But when it skips the searching, you skip the part where your thinking grows. Muse keeps the effort that matters and brings AI in where it helps.</p>
+          <p>Muse is about growing a mindset of curiosity and reflection. Creativity is something you practise, and the practice is the point. When AI hands you a finished answer, you skip the looking, wondering and choosing where your thinking actually grows.</p>
+          <p>So in Muse, you do that work yourself. AI assists along the way as a second pair of eyes, not a shortcut, and every creative decision stays with you.</p>
         </div>
 
         <ol className="loop-strip">
-          <li><small>BEFORE</small><strong>You set the direction</strong><p>You look, notice and write first. The intent is yours.</p></li>
-          <li className="muse"><small><Icon name="spark" size={10} /> IN BETWEEN</small><strong>Muse adds a second view</strong><p>It builds on your words with directions you might not have tried.</p></li>
-          <li><small>AFTER</small><strong>You decide what matters</strong><p>You compare, choose and combine. Every idea that moves on was picked by you.</p></li>
+          <li><small>FIRST</small><strong>You explore on your own</strong><p>You look at each photo and write your own ideas. The direction is yours.</p></li>
+          <li className="muse"><small><Icon name="spark" size={10} /> ALONGSIDE</small><strong>Muse explores separately</strong><p>Muse does the same exercise: it looks at your question and the same photos and comes up with its own ideas, loose ones too.</p></li>
+          <li><small>THEN</small><strong>You mix and decide</strong><p>You put both sets side by side, notice what differs, and choose what moves on.</p></li>
         </ol>
 
         <div className="mindset-head">
@@ -305,6 +310,10 @@ export function HomePage({ onStart }: { onStart: () => void }) {
               <p>{m.text}</p>
             </article>
           ))}
+        </div>
+        <div className="safe-callout">
+          <strong>Bad ideas are welcome here</strong>
+          <p>A session is about getting ideas out, not getting them right. Silly, strange and half-finished ideas all count. When it feels safe to share the bad ones, the good ones start to show up.</p>
         </div>
         <p className="credit">Inspired by <a href="https://dschool.stanford.edu/stories/creativity-ai-easy-button" target="_blank" rel="noreferrer">Creativity in the Age of AI</a>, a three-part series by Glenn Fajardo at the Stanford d.school.</p>
       </section>
@@ -325,12 +334,7 @@ export function HomePage({ onStart }: { onStart: () => void }) {
               <p className="good"><strong>Good for</strong>{t.good}</p>
             </article>
           ))}
-          <article className="technique-big blank">
-            <span className="technique-icon"><Icon name="plus" /></span>
-            <small>COMING LATER</small>
-            <h3>More techniques</h3>
-            <p>New classic techniques will be added over time, each one short and easy to try.</p>
-          </article>
+
         </div>
       </section>
 

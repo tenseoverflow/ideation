@@ -409,7 +409,14 @@ h1 { max-width: 720px; margin: 13px 0 0; font-family: 'DM Serif Display', serif;
 .journey-map a { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 8px; border: 1px solid #dedad1; border-radius: 30px; background: #fffefa; color: #242125; font-size: 13px; font-weight: 700; text-decoration: none; }
 .journey-map a:hover { border-color: #6948bb; color: #6948bb; }
 .journey-map a span { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: white; background: #6948bb; font-size: 12px; }
-.walkthrough { position: relative; display: grid; gap: 96px; }
+.walkthrough { position: relative; display: grid; gap: 140px; }
+.walk-step:not(.feature) { padding-block: 12px; }
+.walk-step.feature { margin-block: 20px; }
+.home-section-head > p + p { margin-top: 10px; }
+.demo-count { display: inline-flex; align-items: center; gap: 5px; color: #8a857e; font-size: 11px; font-weight: 700; }
+.demo-count.met { color: #4f7a2a; }
+.thought-count { display: inline-flex; align-items: center; gap: 5px; }
+.thought-count.met { color: #4f7a2a !important; font-weight: 700; }
 .walk-step { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 56px; align-items: center; scroll-margin-top: 90px; }
 .walk-step:nth-child(even) .walk-copy { order: 2; }
 .walk-copy { display: grid; align-content: start; gap: 10px; min-width: 0; }
@@ -443,7 +450,7 @@ h1 { max-width: 720px; margin: 13px 0 0; font-family: 'DM Serif Display', serif;
 .mock-form strong { margin-bottom: 4px; font-family: 'DM Serif Display', serif; font-size: 19px; font-weight: 400; }
 .mock-form label { margin-top: 4px; font-weight: 700; font-size: 10px; }
 .mock-form .mock-cta { margin-top: 8px; }
-.mock-lenses { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.mock-lenses { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .mock-lens { position: relative; display: flex; align-items: center; gap: 8px; padding: 12px; border: 1.5px solid transparent; border-radius: 10px; }
 .mock-lens.violet { background: #e3dbf9; } .mock-lens.yellow { background: #f6e7a1; }
 .mock-lens.selected { border-color: #6948bb; }
@@ -596,3 +603,23 @@ h1 { max-width: 720px; margin: 13px 0 0; font-family: 'DM Serif Display', serif;
   .action-strip b { font-size: 13px; }
   .repeat-banner { font-size: 14px; }
 }
+
+/* ---------- Worst idea technique ---------- */
+.technique-card.rose { background: #f5d6cf; }
+.technique-card.rose.selected { border-color: #b4553f; }
+.crew-picker { display: grid; gap: 12px; margin-top: 12px; padding: 16px 18px; border: 1px solid #e3c4bc; border-radius: 13px; background: #fbefec; }
+.crew-picker > div:first-child { display: grid; gap: 3px; }
+.crew-picker strong { font-size: 12px; }
+.crew-picker > div:first-child span { color: #7c6a66; font-size: 11px; }
+.crew-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.crew-options button { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px 5px 5px; border: 1px solid #e3c4bc; border-radius: 30px; background: white; color: #5a4743; font-size: 11px; font-weight: 700; }
+.crew-options button span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; color: #5a4743; background: #f5d6cf; font-size: 8px; }
+.crew-options button.on { border-color: #2d2731; color: white; background: #2d2731; }
+.crew-options button.on span { color: #2d2731; background: white; }
+.role-card.worst-card { background: #f5d6cf; }
+.technique-big.rose { background: #f5d6cf; }
+.mock-lens.rose { background: #f5d6cf; }
+.safe-callout { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 8px 32px; align-items: baseline; margin-top: 16px; padding: 24px 28px; border-radius: 18px; background: #f5d6cf; }
+.safe-callout strong { font-family: 'DM Serif Display', serif; font-size: 24px; font-weight: 400; line-height: 1.15; }
+.safe-callout p { margin: 0; color: #5a4743; font-size: 15px; line-height: 1.6; }
+@media (max-width: 680px) { .safe-callout { grid-template-columns: 1fr; } .mock-lenses { grid-template-columns: 1fr; } }

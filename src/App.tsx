@@ -12,7 +12,13 @@ const roles = [
   { name: "Chef", initials: "CH", cue: "Combine ingredients into an experience.", words: ["menu", "taste", "gather"] },
 ];
 
-type Technique = "Photo sparks" | "Role play";
+type Technique = "Photo sparks" | "Role play" | "Worst idea";
+
+const crewOptions = [
+  { name: "Engineer", initials: "EN" }, { name: "Doctor", initials: "DR" }, { name: "Dancer", initials: "DA" }, { name: "Chemist", initials: "CM" },
+  { name: "Mechanic", initials: "ME" }, { name: "Child", initials: "CH" }, { name: "Gardener", initials: "GA" }, { name: "Musician", initials: "MU" },
+  { name: "Teacher", initials: "TE" }, { name: "Architect", initials: "AR" }, { name: "Farmer", initials: "FA" }, { name: "Comedian", initials: "CO" },
+];
 type Stage = "ideate" | "review" | "shortlist";
 type View = "home" | "projects";
 
@@ -28,6 +34,7 @@ type Pick = { entryId: number; source: "you" | "muse"; text: string };
 type MuseReading = { status: "loading" | "done" | "error"; ideas: string[] };
 
 const MUSE_PER_SPARK = 6;
+const withArticle = (word: string) => `${/^[aeiou]/i.test(word) ? "an" : "a"} ${word}`;
 const samePick = (a: Pick, b: Pick) => a.entryId === b.entryId && a.source === b.source && a.text === b.text;
 
 /* ---------- Shared header (same on every page) ---------- */
@@ -110,8 +117,18 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
   const [draft, setDraft] = useField("draft", "");
   const [currentThoughts, setCurrentThoughts] = useField<string[]>("currentThoughts", []);
   const [voiceNote, setVoiceNote] = useState(false);
+  const [crew, setCrew] = useField<string[]>("crew", ["Engineer", "Doctor", "Dancer"]);
+  const [crewIndex, setCrewIndex] = useField("crewIndex", 0);
 
   const isPhoto = selectedTechnique === "Photo sparks";
+  const isWorst = selectedTechnique === "Worst idea";
+  const member = crewOptions.find((c) => c.name === crew[crewIndex % crew.length]) ?? crewOptions[0];
+  const promptNoun = isPhoto ? "photo" : isWorst ? "person" : "role";
+  function toggleCrew(name: string) {
+    if (crew.includes(name)) { if (crew.length > 1) setCrew(crew.filter((c) => c !== name)); }
+    else setCrew([...crew, name]);
+    setCrewIndex(0);
+  }
   const allThoughts = [...entries.flatMap((e) => e.userThoughts), ...currentThoughts];
 
   function addThought() {
@@ -125,10 +142,10 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
     const thoughts = draft.trim() ? [...currentThoughts, draft.trim()] : currentThoughts;
     const entry: SessionEntry = {
       id: entries.length + 1,
-      label: isPhoto ? `Photo ${round}` : roles[roleIndex].name,
+      label: isPhoto ? `Photo ${round}` : isWorst ? member.name : roles[roleIndex].name,
       technique: selectedTechnique,
       imageUrl: isPhoto ? photos[photoIndex].url : undefined,
-      stimulus: isPhoto ? photos[photoIndex].alt : `Think like a ${roles[roleIndex].name}: ${roles[roleIndex].cue}`,
+      stimulus: isPhoto ? photos[photoIndex].alt : isWorst ? `The worst possible idea, as ${withArticle(member.name)}` : `Think like ${withArticle(roles[roleIndex].name)}: ${roles[roleIndex].cue}`,
       userThoughts: thoughts,
     };
     setEntries([...entries, entry]);
@@ -140,6 +157,7 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
     captureEntry();
     if (round >= limit) return onFinish();
     if (isPhoto) setPhotoIndex((photoIndex + 1) % photos.length);
+    else if (isWorst) setCrewIndex((crewIndex + 1) % crew.length);
     else setRoleIndex((roleIndex + 1) % roles.length);
     setRound(round + 1);
   }
@@ -152,9 +170,10 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
   const techniques = [
     { name: "Photo sparks", detail: "React to random images", tone: "violet", icon: "image" as IconName },
     { name: "Role play", detail: "Solve it through new eyes", tone: "yellow", icon: "play" as IconName },
+    { name: "Worst idea", detail: "Bad ideas only, on purpose", tone: "rose", icon: "bulb" as IconName },
   ];
   const progressStep = Math.max(1, Math.ceil((round / limit) * 10));
-  const nextLabel = round >= limit ? "Finish & see Muse" : isPhoto ? "Next photo" : "Next role";
+  const nextLabel = round >= limit ? "Finish & see Muse" : isPhoto ? "Next photo" : isWorst ? "Next person" : "Next role";
 
   return (
     <div className="canvas-scroll">
@@ -190,11 +209,19 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
               <span className="radio-dot" />
             </AppButton>
           ))}
-          <div className="technique-card blank" aria-label="Future ideation technique">
-            <span className="technique-icon"><Icon name="plus" /></span>
-            <span><strong>Open space</strong><small>A new technique will live here</small></span>
-          </div>
         </div>
+        {isWorst && (
+          <div className="crew-picker">
+            <div><strong>Who joins your brainstorm?</strong><span>Pick the people whose worst ideas you want. You take turns being each of them.</span></div>
+            <div className="crew-options">
+              {crewOptions.map((c) => (
+                <AppButton aria-pressed={crew.includes(c.name)} className={crew.includes(c.name) ? "on" : ""} key={c.name} onClick={() => toggleCrew(c.name)}>
+                  <span>{c.initials}</span>{c.name}{crew.includes(c.name) && <Icon name="check" size={12} />}
+                </AppButton>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="session-length">
           <div><strong>How many sparks?</strong><span>Choose a finish line before you begin.</span></div>
           <div className="length-options">
@@ -207,7 +234,7 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
 
       <section className="exercise">
         <div className="section-title">
-          <div><span className="section-number">02</span><h2>{isPhoto ? "Look. React. Connect." : "Step into a new role"}</h2></div>
+          <div><span className="section-number">02</span><h2>{isPhoto ? "Look. React. Connect." : isWorst ? "Bad ideas only" : "Step into a new role"}</h2></div>
           <AppButton className="finish-early" onClick={finishNow}>Finish & see Muse</AppButton>
         </div>
 
@@ -217,6 +244,15 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
               <img src={photos[photoIndex].url} alt={photos[photoIndex].alt} />
               <div className="photo-topline"><span><Icon name="image" size={15} /> PHOTO SPARK</span><span>{String(round).padStart(2, "0")} / {limit}</span></div>
               <div className="photo-footer"><span>Photo by {photos[photoIndex].credit} on Unsplash</span></div>
+            </div>
+          ) : isWorst ? (
+            <div className="role-card worst-card">
+              <div className="role-topline"><span><Icon name="bulb" size={14} /> WORST IDEA {String(round).padStart(2, "0")} / {limit}</span></div>
+              <span className="role-avatar">{member.initials}</span>
+              <span className="role-label">YOU ARE THE</span>
+              <h3>{member.name}</h3>
+              <p>What is the worst idea {withArticle(member.name.toLowerCase())} could have for this challenge?</p>
+              <div className="role-words"><span>no filter</span><span>the worse, the better</span><span>no wrong answers</span></div>
             </div>
           ) : (
             <div className="role-card">
@@ -233,11 +269,11 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
             <div className="thought-step your-thought-step">
               <div className="thought-exchange-heading">
                 <span className="prompt-kicker">YOUR THOUGHTS</span>
-                <h3>{isPhoto ? "What could this photo mean for your project?" : `How would a ${roles[roleIndex].name.toLowerCase()} solve this?`}</h3>
-                <p>Write or say what comes to mind, as many thoughts as you like. Muse stays quiet until the session is done.</p>
+                <h3>{isPhoto ? "What could this photo mean for your project?" : isWorst ? `As ${withArticle(member.name.toLowerCase())}, what’s the worst idea you can think of?` : `How would ${withArticle(roles[roleIndex].name.toLowerCase())} solve this?`}</h3>
+                <p>{isWorst ? "Go for terrible, silly or impossible. This is about getting ideas out, not getting them right. Aim for at least 3 before you pass to the next person." : "Write one thought and press Enter. Then keep going: aim for at least 3 different ideas before you move on. There is no limit."}</p>
               </div>
               <div className="current-thoughts">
-                {currentThoughts.length === 0 && <span className="placeholder-chip">Your thoughts for this {isPhoto ? "photo" : "role"} appear here</span>}
+                {currentThoughts.length === 0 && <span className="placeholder-chip">Your {isWorst ? "worst ideas" : "thoughts"} for this {promptNoun} appear here</span>}
                 {currentThoughts.map((thought) => <span key={thought}>{thought}</span>)}
               </div>
               <div className="idea-input">
@@ -246,7 +282,7 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
                   maxLength={240}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); addThought(); } }}
-                  placeholder="Write down what comes to mind… (Enter adds it)"
+                  placeholder={isWorst ? "The worst idea I can think of… (Enter adds it)" : "Write down what comes to mind… (Enter adds it)"}
                   value={draft}
                 />
                 <div>
@@ -258,7 +294,7 @@ function MainCanvas({ project, onFinish }: { project: Project; onFinish: () => v
                 </div>
               </div>
               <div className="exchange-footer">
-                <span>{currentThoughts.length + (draft.trim() ? 1 : 0)} {currentThoughts.length + (draft.trim() ? 1 : 0) === 1 ? "thought" : "thoughts"} on this {isPhoto ? "photo" : "role"}</span>
+                <span className={`thought-count ${currentThoughts.length >= 3 ? "met" : ""}`}>{currentThoughts.length >= 3 && <Icon name="check" size={12} />}{currentThoughts.length} {currentThoughts.length === 1 ? "thought" : "thoughts"} from this {promptNoun}{currentThoughts.length < 3 ? " · aim for 3 or more" : ""}</span>
                 <AppButton className="next-spark-button" onClick={nextStimulus}>{nextLabel} <Icon name="arrow" size={16} /></AppButton>
               </div>
             </div>
@@ -298,7 +334,7 @@ function useMuseReadings(project: Project, entries: SessionEntry[]) {
     put({ status: "loading", ideas: [] });
     try {
       const technique: Technique = entry.technique ?? (entry.imageUrl ? "Photo sparks" : "Role play");
-      const body: MuseRequest = { projectId: project.id, technique, role: technique === "Role play" ? entry.label : undefined, stimulus: entry.stimulus ?? entry.label, thoughts: entry.userThoughts };
+      const body: MuseRequest = { projectId: project.id, technique, role: technique !== "Photo sparks" ? entry.label : undefined, stimulus: entry.stimulus ?? entry.label };
       const data = await api<MuseResponse>("/api/muse", "POST", body);
       put({ status: "done", ideas: data.ideas.slice(0, MUSE_PER_SPARK) });
     } catch {
@@ -312,7 +348,7 @@ function useMuseReadings(project: Project, entries: SessionEntry[]) {
     (async () => {
       for (const entry of entries) {
         const r = latest.current[entry.id];
-        if (!entry.userThoughts.length || (r && r.status !== "loading")) continue;
+        if (r && r.status !== "loading") continue;
         await load(entry);
       }
       running.current = false;
@@ -340,7 +376,7 @@ function ReviewCanvas({ project, entries, onBack, onContinue }: { project: Proje
       <section className="review-hero">
         <span className="eyebrow">STEP 2 OF 3 · COMPARE WITH MUSE</span>
         <h1>Now see what Muse noticed.</h1>
-        <p>Read your own thoughts first, then Muse’s reading of each {entries.some((e) => e.imageUrl) ? "photo" : "spark"}. Tap the ideas worth keeping, from either side. They move on with you to the next session.</p>
+        <p>Muse did the same exercise on its own: it looked at the same {entries.some((e) => e.imageUrl) ? "photos" : "prompts"} with your challenge in mind. Read your own thoughts first, then Muse’s. Tap the ideas worth keeping, from either side. They move on with you to the next round.</p>
         <div className="review-stats"><strong>{entries.length}</strong><span>sparks explored</span><strong>{entries.flatMap((e) => e.userThoughts).length}</strong><span>thoughts from you</span></div>
       </section>
 
@@ -371,8 +407,7 @@ function ReviewCanvas({ project, entries, onBack, onContinue }: { project: Proje
                 <div className="thought-column ai-column">
                   <span><Icon name="spark" size={10} /> MUSE’S THOUGHTS</span>
                   <div>
-                    {!entry.userThoughts.length && <em className="empty-selection">Muse builds on your words, so nothing here yet</em>}
-                    {entry.userThoughts.length > 0 && (!reading || reading.status === "loading") && <em className="loading-chip">Muse is reading this {entry.imageUrl ? "photo" : "role"}…</em>}
+                    {(!reading || reading.status === "loading") && <em className="loading-chip">Muse is looking at this {entry.imageUrl ? "photo" : "role"}…</em>}
                     {reading?.status === "error" && <AppButton className="pick-chip retry" onClick={() => void retry(entry)}>Muse couldn’t answer. Retry</AppButton>}
                     {reading?.status === "done" && reading.ideas.map((text) => {
                       const pick: Pick = { entryId: entry.id, source: "muse", text };
@@ -455,7 +490,7 @@ function ProjectSession({ project }: { project: Project }) {
 
   function restartSession() {
     if (!confirm("Clear this project’s session and start over?")) return;
-    for (const [key, value] of Object.entries({ draft: "", currentThoughts: [], entries: [], picks: [], museReadings: {}, photoIndex: 0, roleIndex: 0, round: 1 })) set(key, value);
+    for (const [key, value] of Object.entries({ draft: "", currentThoughts: [], entries: [], picks: [], museReadings: {}, photoIndex: 0, roleIndex: 0, crewIndex: 0, round: 1 })) set(key, value);
     setStage("ideate");
   }
 
