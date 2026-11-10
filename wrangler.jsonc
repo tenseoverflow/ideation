@@ -1,0 +1,24 @@
+{
+  "name": "muse",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-30",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "muse",
+      "database_id": "cb9fe65d-d1ea-489a-a678-159abe39aee8"
+    }
+  ],
+  "workers_dev": true,
+  "preview_urls": false
+}
